@@ -31,6 +31,7 @@ X, color = make_swiss_roll(n_samples=n_samples, random_state=42)
 
 # Initialize and fit the model
 pumap = ParametricUMAP(
+    device='cuda:0'
     n_components=2,
     hidden_dim=128,
     n_layers=3,
@@ -54,6 +55,7 @@ Hyperparameters default values follow the [original UMAP implementation](https:/
 - `n_neighbors`: number of neighbors to compute for UMAP knn graph (default: 15)
 
 **Parametric model**
+- `device`: 'cpu' or 'cuda' (also specific device 'cuda:1', automatically uses GPU acceleration if GPU card is detected)
 - `n_components`: Dimension of the output embedding (default: 2)
 - `hidden_dim`: Dimension of hidden layers in the MLP (default: 1024)
 - `n_layers`: Number of hidden layers (default: 3)
