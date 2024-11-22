@@ -4,8 +4,13 @@ A PyTorch implementation of Parametric UMAP (Uniform Manifold Approximation and 
 ## Install
 A proper installation of [PyTorch](https://pytorch.org) (possibly with GPU accelaration) is suggested before installing this package. The package can then be installed with
 
-```python
+```bash
 pip install parametric_umap
+```
+
+To instead install the latest version of this repository use
+```bash
+pip install git+https://github.com/mr-fcharles/parametric_umap.git
 ```
 
 ## Overview
