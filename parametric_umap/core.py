@@ -79,7 +79,7 @@ class ParametricUMAP:
             use_dropout=self.use_dropout
         ).to(self.device)
         
-    def fit(self, X, y=None,resample_negatives=False):
+    def fit(self, X, y=None,resample_negatives=False,n_processes=6,random_state=0,verbose=True,):
         """
         Fit the model using X as training data.
         
@@ -114,7 +114,14 @@ class ParametricUMAP:
         self.model.train()
         losses = []
 
-        loader = ed.get_loader(batch_size=self.batch_size, sample_first=True)
+        loader = ed.get_loader(batch_size=self.batch_size, 
+                               sample_first=True,
+                               random_state=random_state,
+                               n_processes=n_processes,
+                               verbose=verbose)
+        
+        if verbose:
+            print('Training...')
         
         for epoch in range(self.n_epochs):
             epoch_loss = 0
@@ -184,7 +191,7 @@ class ParametricUMAP:
             
         return X_reduced.cpu().numpy()
     
-    def fit_transform(self, X, y=None):
+    def fit_transform(self, X):
         """
         Fit the model with X and apply the dimensionality reduction on X.
         
@@ -192,8 +199,6 @@ class ParametricUMAP:
         -----------
         X : array-like of shape (n_samples, n_features)
             Training data
-        y : Ignored
-            Not used, present for API consistency
             
         Returns:
         --------

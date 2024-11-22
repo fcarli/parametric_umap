@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor
 from tqdm.auto import tqdm
@@ -49,9 +50,6 @@ class EdgeDataset:
         self.neg_edges = None
         self.all_edges = None
 
-    def sample_negative_edges(self, random_state=0):
-        self.neg_edges = self._sample_negative_edges([src for src, _ in self.pos_edges], random_state=random_state)
-
     def _shuffle_edges(self, random_state=0):
         """Shuffle the edges using the given random state"""
         # Get permutation indices
@@ -62,14 +60,14 @@ class EdgeDataset:
         self.all_edges = [self.all_edges[i] for i in perm]
         #self.all_edges_prob = [self.all_edges_prob[i] for i in perm]
         
-    def sample_and_shuffle(self, random_state=0):
-        self.sample_negative_edges(random_state=random_state)
+    def sample_and_shuffle(self, random_state=0,n_processes=6,verbose=True):
+        self.sample_negative_edges(random_state=random_state,n_processes=n_processes,verbose=verbose)
         self.all_edges = self.pos_edges + self.neg_edges
         #self.all_edges_prob = self.pos_edges_prob.extend(self.neg_edges_prob)
         
         self._shuffle_edges(random_state=random_state)
 
-    def get_loader(self, batch_size, sample_first=False, random_state=0):
+    def get_loader(self, batch_size, sample_first=False, random_state=0,n_processes=6,verbose=True):
         """
         Returns an iterator that yields batches of edges and their probabilities.
         
@@ -77,34 +75,54 @@ class EdgeDataset:
         - batch_size: int, size of each batch
         - sample_first: bool, whether to call sample_and_shuffle() before creating loader
         - random_state: int or None, random seed for reproducibility
+        - n_processes: int, number of processes to use for sampling negative edges
         
         Returns:
         - Iterator yielding tuples of (edge_batch, prob_batch)
         """
         if sample_first:
-            self.sample_and_shuffle(random_state=random_state)
+            self.sample_and_shuffle(random_state=random_state,n_processes=n_processes,verbose=verbose)
             
         if self.all_edges is None:
             raise ValueError("Must call sample_and_shuffle() before getting loader")
             
         # Return a custom iterator class that can be reused
         return EdgeBatchIterator(self.all_edges, batch_size)
+    
+    def sample_negative_edges(self, random_state=0,n_processes=6,verbose=True):
+        self.neg_edges = self._sample_negative_edges([src for src, _ in self.pos_edges], random_state=random_state,n_processes=n_processes,verbose=verbose)
 
+    def _sample_negative_edges(self, node_list, k=5, random_state=0,n_processes=6,verbose=True):
+        #count available cores
+        if n_processes == -1:
+            n_processes = os.cpu_count()
+        else:
+            n_processes = min(n_processes, os.cpu_count())
 
-    def _sample_negative_edges(self, node_list, k=5, random_state=0,n_processes=16):
+        # Create a base RNG to generate seeds for each process
+        base_rng = np.random.RandomState(random_state)
+        process_seeds = base_rng.randint(0, np.iinfo(np.int32).max, size=n_processes)
 
-        #split node_list into n_processes chunks
+        # Split node_list into chunks
         node_chunks = np.array_split(node_list, n_processes)
 
-        #run _sample_negative_edges_chunk in parallel
+        if verbose:
+            print('Sampling negative edges...')
+
+        # Run parallel processing with unique seeds
         with ProcessPoolExecutor(max_workers=n_processes) as executor:
             futures = []
-            for i, chunk in enumerate(node_chunks):
-                futures.append(executor.submit(self._sample_negative_edges_chunk, chunk, k=k, random_state=random_state, process_id=i))
+            for i, (chunk, seed) in enumerate(zip(node_chunks, process_seeds)):
+                futures.append(executor.submit(
+                    self._sample_negative_edges_chunk, 
+                    chunk, 
+                    k=k, 
+                    random_state=seed
+                ))
             
+            # Use position=0 to ensure proper display with nested progress bars
             neg_edges = []
-            for future in tqdm(futures, total=len(futures)):
-                #print(future.result())
+            for future in tqdm(futures, total=len(futures), desc="Completed processes", position=0, leave=True):
                 neg_edges.extend(future.result())
 
         return neg_edges
@@ -123,12 +141,13 @@ class EdgeDataset:
         Returns:
         - neg_edges: list of tuples (i,j) representing negative edges
         """
-        rng = np.random.RandomState(random_state*process_id)
+        # Remove process_id parameter since we now use unique seeds
+        rng = np.random.RandomState(random_state)
         n_nodes = len(self.adj_sets)
         neg_edges = []
         
-        # For each node in the input list
-        for node in tqdm(node_list):
+        # Use position=1 for nested progress bar
+        for node in tqdm(node_list, desc="Processing nodes", position=1, leave=False):
             # Get the set of nodes that are already connected
             connected = self.adj_sets[node]
             
