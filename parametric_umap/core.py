@@ -80,7 +80,12 @@ class ParametricUMAP:
             use_dropout=self.use_dropout
         ).to(self.device)
         
-    def fit(self, X, y=None,resample_negatives=False,n_processes=6,random_state=0,verbose=True):
+    def fit(self, X, y=None,
+            resample_negatives=False,
+            n_processes=6,
+            low_memory=False,
+            random_state=0,
+            verbose=True):
         """
         Fit the model using X as training data.
         
@@ -106,7 +111,11 @@ class ParametricUMAP:
         dataset = VariableDataset(X).to(self.device)
         P_sym = compute_all_p_umap(X, k=self.n_neighbors)
         ed = EdgeDataset(P_sym)
-        target_dataset = TorchSparseDataset(P_sym).to(self.device)
+        
+        if low_memory:
+            target_dataset = TorchSparseDataset(P_sym)
+        else:
+            target_dataset = TorchSparseDataset(P_sym).to(self.device) #if the dataset is not too big, it's better to keep it on GPU for faster computation
         
         # Initialize optimizer
         optimizer = AdamW(self.model.parameters(), lr=self.learning_rate)
@@ -140,6 +149,12 @@ class ParametricUMAP:
                 src_values = dataset[src_indexes]
                 dst_values = dataset[dst_indexes]
                 targets = target_dataset[edge_batch]
+
+                # If low memory, the dataset is not on GPU, so we need to move the values to GPU
+                if low_memory:
+                    src_values = src_values.to(self.device)
+                    dst_values = dst_values.to(self.device)
+                    targets = targets.to(self.device)
                 
                 # Get embeddings from model
                 src_embeddings = self.model(src_values)
@@ -201,7 +216,7 @@ class ParametricUMAP:
             
         return X_reduced.cpu().numpy()
     
-    def fit_transform(self, X,verbose=True):
+    def fit_transform(self, X,verbose=True,low_memory=False):
         """
         Fit the model with X and apply the dimensionality reduction on X.
         
@@ -215,7 +230,7 @@ class ParametricUMAP:
         X_new : array-like of shape (n_samples, n_components)
             Transformed data
         """
-        self.fit(X,verbose=verbose)
+        self.fit(X,verbose=verbose,low_memory=low_memory)
         return self.transform(X)
     
     def save(self, path):

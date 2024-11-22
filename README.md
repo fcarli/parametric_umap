@@ -51,6 +51,12 @@ X_new = np.random.rand(100, 3)
 new_embeddings = pumap.transform(X_new)
 ```
 
+Note that by default the data is moved to the specified device before training to accelerate training process. However, if your GPU card cannot fit the entire dataset in memory you can override this behavior by setting the `low_memory` argument to true as follows:
+
+```python
+embeddings = pumap.fit_transform(X,low_memory=True)
+```
+
 ## Key Parameters
 Hyperparameters default values follow the [original UMAP implementation](https://umap-learn.readthedocs.io/en/latest/)
 
