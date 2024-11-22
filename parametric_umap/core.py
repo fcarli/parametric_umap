@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 from torch.optim import AdamW
 import numpy as np
+from tqdm.auto import tqdm
 
 class ParametricUMAP:
     def __init__(
@@ -79,7 +80,7 @@ class ParametricUMAP:
             use_dropout=self.use_dropout
         ).to(self.device)
         
-    def fit(self, X, y=None,resample_negatives=False,n_processes=6,random_state=0,verbose=True,):
+    def fit(self, X, y=None,resample_negatives=False,n_processes=6,random_state=0,verbose=True):
         """
         Fit the model using X as training data.
         
@@ -123,20 +124,24 @@ class ParametricUMAP:
         if verbose:
             print('Training...')
         
-        for epoch in range(self.n_epochs):
+        pbar = tqdm(range(self.n_epochs), desc='Epochs', position=0)
+        for epoch in pbar:
             epoch_loss = 0
             num_batches = 0
             
-            for edge_batch in loader:
+            for edge_batch in tqdm(loader, desc=f'Epoch {epoch+1}', position=1, leave=False):
                 optimizer.zero_grad()
                 
+                # Get src and dst indexes from edge_batch
                 src_indexes = [i for i,j in edge_batch]
                 dst_indexes = [j for i,j in edge_batch]
                 
+                # Get values from dataset
                 src_values = dataset[src_indexes]
                 dst_values = dataset[dst_indexes]
                 targets = target_dataset[edge_batch]
                 
+                # Get embeddings from model
                 src_embeddings = self.model(src_values)
                 dst_embeddings = self.model(dst_values)
                 
@@ -161,7 +166,12 @@ class ParametricUMAP:
             
             avg_loss = epoch_loss / num_batches
             losses.append(avg_loss)
-            print(f'Epoch {epoch+1}/{self.n_epochs}, Loss: {avg_loss:.4f}')
+            
+            # Update progress bar with current loss
+            pbar.set_postfix({'loss': f'{avg_loss:.4f}'})
+
+            if verbose:
+                print(f'Epoch {epoch+1}/{self.n_epochs}, Loss: {avg_loss:.4f}')
             
         self.is_fitted = True
         return self
@@ -191,7 +201,7 @@ class ParametricUMAP:
             
         return X_reduced.cpu().numpy()
     
-    def fit_transform(self, X):
+    def fit_transform(self, X,verbose=True):
         """
         Fit the model with X and apply the dimensionality reduction on X.
         
@@ -205,7 +215,7 @@ class ParametricUMAP:
         X_new : array-like of shape (n_samples, n_components)
             Transformed data
         """
-        self.fit(X)
+        self.fit(X,verbose=verbose)
         return self.transform(X)
     
     def save(self, path):

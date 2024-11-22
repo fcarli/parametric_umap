@@ -38,6 +38,9 @@ class EdgeBatchIterator:
         edge_batch = self.current_edges[self.current:self.current + self.batch_size]
         self.current += self.batch_size
         return edge_batch
+    
+    def __len__(self):
+        return (len(self.current_edges) + self.batch_size - 1) // self.batch_size
 
 
 class EdgeDataset:
