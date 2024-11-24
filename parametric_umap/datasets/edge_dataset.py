@@ -44,7 +44,15 @@ class EdgeBatchIterator:
 
 
 class EdgeDataset:
-    def __init__(self, P_sym):
+    def __init__(self, P_sym,anchors_mask=None):
+        """
+        Initialize EdgeDataset with optional anchor information
+        
+        Parameters:
+        -----------
+        P_sym : scipy.sparse.csr_matrix
+            Symmetric probability matrix
+        """
         self.adj_sets = self._get_adjacency_sets(P_sym)
         
         P_sym_dok = P_sym.todok()
@@ -52,6 +60,7 @@ class EdgeDataset:
         
         self.neg_edges = None
         self.all_edges = None
+        self.anchors_mask = anchors_mask
 
     def _shuffle_edges(self, random_state=0):
         """Shuffle the edges using the given random state"""
@@ -63,14 +72,16 @@ class EdgeDataset:
         self.all_edges = [self.all_edges[i] for i in perm]
         #self.all_edges_prob = [self.all_edges_prob[i] for i in perm]
         
-    def sample_and_shuffle(self, random_state=0,n_processes=6,verbose=True):
+    def sample_and_shuffle(self, random_state=0,n_processes=6,verbose=True,sub_ratio=None):
         self.sample_negative_edges(random_state=random_state,n_processes=n_processes,verbose=verbose)
         self.all_edges = self.pos_edges + self.neg_edges
+        if sub_ratio is not None:
+            self.all_edges_sub = self.all_edges[:int(len(self.all_edges) * sub_ratio)]
         #self.all_edges_prob = self.pos_edges_prob.extend(self.neg_edges_prob)
         
         self._shuffle_edges(random_state=random_state)
 
-    def get_loader(self, batch_size, sample_first=False, random_state=0,n_processes=6,verbose=True):
+    def get_loader(self, batch_size, sample_first=False, random_state=0,n_processes=6,verbose=True,sub_ratio=None):
         """
         Returns an iterator that yields batches of edges and their probabilities.
         
@@ -83,14 +94,18 @@ class EdgeDataset:
         Returns:
         - Iterator yielding tuples of (edge_batch, prob_batch)
         """
+
         if sample_first:
-            self.sample_and_shuffle(random_state=random_state,n_processes=n_processes,verbose=verbose)
+            self.sample_and_shuffle(random_state=random_state,n_processes=n_processes,verbose=verbose,sub_ratio=sub_ratio)
             
         if self.all_edges is None:
             raise ValueError("Must call sample_and_shuffle() before getting loader")
-            
+
         # Return a custom iterator class that can be reused
-        return EdgeBatchIterator(self.all_edges, batch_size)
+        if sub_ratio is None:
+            return EdgeBatchIterator(self.all_edges, batch_size)
+        else:
+            return EdgeBatchIterator(self.all_edges_sub, batch_size)
     
     def sample_negative_edges(self, random_state=0,n_processes=6,verbose=True):
         self.neg_edges = self._sample_negative_edges([src for src, _ in self.pos_edges], random_state=random_state,n_processes=n_processes,verbose=verbose)
@@ -144,6 +159,7 @@ class EdgeDataset:
         Returns:
         - neg_edges: list of tuples (i,j) representing negative edges
         """
+        
         # Remove process_id parameter since we now use unique seeds
         rng = np.random.RandomState(random_state)
         n_nodes = len(self.adj_sets)
@@ -151,6 +167,11 @@ class EdgeDataset:
         
         # Use position=1 for nested progress bar
         for node in tqdm(node_list, desc="Processing nodes", position=1, leave=False):
+
+            # Skip if node is an anchor
+            if self.anchors_mask is not None and self.anchors_mask[node]:
+                continue
+            
             # Get the set of nodes that are already connected
             connected = self.adj_sets[node]
             
