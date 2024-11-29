@@ -1,12 +1,33 @@
 import torch
+from typing import Tuple
 
-def compute_correlation_loss(X_distances, Z_distances):
+
+def compute_correlation_loss(X_distances: torch.Tensor, Z_distances: torch.Tensor) -> torch.Tensor:
     """
-    Compute Pearson correlation between distances in X and Z spaces
+    Compute the negative Pearson correlation between distances in input and embedding spaces.
     
-    Args:
-        X_distances: Distances in input space (batch_size,)
-        Z_distances: Distances in embedding space (batch_size,)
+    This function calculates the Pearson correlation coefficient between distances in the
+    original space (X_distances) and distances in the embedding space (Z_distances),
+    and returns its negative value since we want to maximize the correlation during
+    optimization.
+    
+    Parameters
+    ----------
+    X_distances : torch.Tensor
+        Distances in input space, shape (batch_size,)
+    Z_distances : torch.Tensor
+        Distances in embedding space, shape (batch_size,)
+        
+    Returns
+    -------
+    torch.Tensor
+        Negative Pearson correlation coefficient between X_distances and Z_distances
+        
+    Notes
+    -----
+    The correlation is computed using the formula:
+        corr = (E[XZ] - E[X]E[Z]) / (std(X) * std(Z))
+    where E[] denotes expectation and std() denotes standard deviation.
     """
     # Compute means
     X_mean = X_distances.mean()

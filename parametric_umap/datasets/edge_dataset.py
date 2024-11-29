@@ -2,18 +2,34 @@ import os
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor
 from tqdm.auto import tqdm
+from typing import List, Tuple, Dict, Set, Optional, Iterator, Union
+from scipy.sparse import csr_matrix
 
 
 class EdgeBatchIterator:
-    def __init__(self, edges, batch_size, shuffle=False, stratify=False):
+    """
+    Iterator class for batching edges during training.
+    
+    Parameters
+    ----------
+    edges : List[Tuple[int, int]]
+        List of edges to iterate over
+    batch_size : int
+        Size of each batch
+    shuffle : bool, optional
+        Whether to shuffle edges before iteration, by default False
+    stratify : bool, optional
+        Whether to stratify batches by edge type, by default False
+    """
+    def __init__(self, edges: List[Tuple[int, int]], batch_size: int, shuffle: bool = False, stratify: bool = False) -> None:
         self.edges = edges
         self.batch_size = batch_size
         self.shuffle = shuffle
-        self.current = 0  # Initialize current counter in __init__
-        self.current_edges = self.edges # Initialize current_edges in __init__
+        self.current: int = 0
+        self.current_edges: List[Tuple[int, int]] = self.edges
         self.stratify = stratify
         
-    def __iter__(self):
+    def __iter__(self) -> 'EdgeBatchIterator':
         if self.shuffle:
             # Create a copy to avoid modifying original edges
             self.current_edges = self.edges.copy()
@@ -28,7 +44,7 @@ class EdgeBatchIterator:
         
         return self
         
-    def __next__(self):
+    def __next__(self) -> List[Tuple[int, int]]:
         if self.current_edges is None:
             raise StopIteration
             
@@ -39,23 +55,37 @@ class EdgeBatchIterator:
         self.current += self.batch_size
         return edge_batch
     
-    def __len__(self):
+    def __len__(self) -> int:
         return (len(self.current_edges) + self.batch_size - 1) // self.batch_size
 
 
 class EdgeDataset:
-    def __init__(self, P_sym):
-        self.adj_sets = self._get_adjacency_sets(P_sym)
+    """
+    Dataset class for handling graph edges, including positive and negative edge sampling.
+    
+    Parameters
+    ----------
+    P_sym : csr_matrix
+        Symmetric probability matrix representing the graph
+    """
+    def __init__(self, P_sym: csr_matrix) -> None:
+        self.adj_sets: Dict[int, Set[int]] = self._get_adjacency_sets(P_sym)
         
         P_sym_dok = P_sym.todok()
-        self.pos_edges = list(P_sym_dok.keys())
+        self.pos_edges: List[Tuple[int, int]] = list(P_sym_dok.keys())
         
-        self.neg_edges = None
-        self.all_edges = None
+        self.neg_edges: Optional[List[Tuple[int, int]]] = None
+        self.all_edges: Optional[List[Tuple[int, int]]] = None
 
-    def _shuffle_edges(self, random_state=0):
-        """Shuffle the edges using the given random state"""
-        # Get permutation indices
+    def _shuffle_edges(self, random_state: int = 0) -> None:
+        """
+        Shuffle all edges using the given random state.
+        
+        Parameters
+        ----------
+        random_state : int, optional
+            Random seed for reproducibility, by default 0
+        """
         rng = np.random.RandomState(random_state)
         perm = rng.permutation(len(self.all_edges))
         
@@ -63,28 +93,50 @@ class EdgeDataset:
         self.all_edges = [self.all_edges[i] for i in perm]
         #self.all_edges_prob = [self.all_edges_prob[i] for i in perm]
         
-    def sample_and_shuffle(self, random_state=0,n_processes=6,verbose=True):
-        self.sample_negative_edges(random_state=random_state,n_processes=n_processes,verbose=verbose)
+    def sample_and_shuffle(self, random_state: int = 0, n_processes: int = 6, verbose: bool = True) -> None:
+        """
+        Sample negative edges and shuffle all edges.
+        
+        Parameters
+        ----------
+        random_state : int, optional
+            Random seed for reproducibility, by default 0
+        n_processes : int, optional
+            Number of processes for parallel sampling, by default 6
+        verbose : bool, optional
+            Whether to show progress bars, by default True
+        """
+        self.sample_negative_edges(random_state=random_state, n_processes=n_processes, verbose=verbose)
         self.all_edges = self.pos_edges + self.neg_edges
         #self.all_edges_prob = self.pos_edges_prob.extend(self.neg_edges_prob)
         
         self._shuffle_edges(random_state=random_state)
 
-    def get_loader(self, batch_size, sample_first=False, random_state=0,n_processes=6,verbose=True):
+    def get_loader(self, batch_size: int, sample_first: bool = False, random_state: int = 0, 
+                  n_processes: int = 6, verbose: bool = True) -> EdgeBatchIterator:
         """
         Returns an iterator that yields batches of edges and their probabilities.
         
-        Parameters:
-        - batch_size: int, size of each batch
-        - sample_first: bool, whether to call sample_and_shuffle() before creating loader
-        - random_state: int or None, random seed for reproducibility
-        - n_processes: int, number of processes to use for sampling negative edges
-        
-        Returns:
-        - Iterator yielding tuples of (edge_batch, prob_batch)
+        Parameters
+        ----------
+        batch_size : int
+            Size of each batch
+        sample_first : bool, optional
+            Whether to sample and shuffle edges before creating loader, by default False
+        random_state : int, optional
+            Random seed for reproducibility, by default 0
+        n_processes : int, optional
+            Number of processes for parallel sampling, by default 6
+        verbose : bool, optional
+            Whether to show progress bars, by default True
+            
+        Returns
+        -------
+        EdgeBatchIterator
+            Iterator yielding batches of edges
         """
         if sample_first:
-            self.sample_and_shuffle(random_state=random_state,n_processes=n_processes,verbose=verbose)
+            self.sample_and_shuffle(random_state=random_state, n_processes=n_processes, verbose=verbose)
             
         if self.all_edges is None:
             raise ValueError("Must call sample_and_shuffle() before getting loader")
@@ -92,11 +144,47 @@ class EdgeDataset:
         # Return a custom iterator class that can be reused
         return EdgeBatchIterator(self.all_edges, batch_size)
     
-    def sample_negative_edges(self, random_state=0,n_processes=6,verbose=True):
-        self.neg_edges = self._sample_negative_edges([src for src, _ in self.pos_edges], random_state=random_state,n_processes=n_processes,verbose=verbose)
+    def sample_negative_edges(self, random_state: int = 0, n_processes: int = 6, verbose: bool = True) -> None:
+        """
+        Sample negative edges for the graph.
+        
+        Parameters
+        ----------
+        random_state : int, optional
+            Random seed for reproducibility, by default 0
+        n_processes : int, optional
+            Number of processes for parallel sampling, by default 6
+        verbose : bool, optional
+            Whether to show progress bars, by default True
+        """
+        self.neg_edges = self._sample_negative_edges([src for src, _ in self.pos_edges], 
+                                                   random_state=random_state,
+                                                   n_processes=n_processes,
+                                                   verbose=verbose)
 
-    def _sample_negative_edges(self, node_list, k=5, random_state=0,n_processes=6,verbose=True):
-        #count available cores
+    def _sample_negative_edges(self, node_list: List[int], k: int = 5, random_state: int = 0,
+                             n_processes: int = 6, verbose: bool = True) -> List[Tuple[int, int]]:
+        """
+        Sample k negative edges for each node in parallel.
+        
+        Parameters
+        ----------
+        node_list : List[int]
+            List of nodes to sample negative edges for
+        k : int, optional
+            Number of negative edges per node, by default 5
+        random_state : int, optional
+            Random seed for reproducibility, by default 0
+        n_processes : int, optional
+            Number of processes for parallel sampling, by default 6
+        verbose : bool, optional
+            Whether to show progress bars, by default True
+            
+        Returns
+        -------
+        List[Tuple[int, int]]
+            List of sampled negative edges
+        """
         if n_processes == -1:
             n_processes = os.cpu_count()
         else:
@@ -130,19 +218,25 @@ class EdgeDataset:
 
         return neg_edges
 
-    def _sample_negative_edges_chunk(self, node_list, k=5, random_state=None,process_id=0):
+    def _sample_negative_edges_chunk(self, node_list: List[int], k: int = 5, 
+                                   random_state: Optional[int] = None) -> List[Tuple[int, int]]:
         """
         Sample k negative edges for each node in the node list.
         A negative edge is an edge between nodes that are not connected in adj_sets.
         
-        Parameters:
-        - node_list: list of integers, nodes to sample negative edges for
-        - adj_sets: dict of sets, adjacency sets for each node
-        - k: int, number of negative edges to sample per node
-        - random_state: int or None, random seed for reproducibility
-    
-        Returns:
-        - neg_edges: list of tuples (i,j) representing negative edges
+        Parameters
+        ----------
+        node_list : List[int]
+            List of nodes to sample negative edges for
+        k : int, optional
+            Number of negative edges per node, by default 5
+        random_state : Optional[int], optional
+            Random seed for reproducibility, by default None
+            
+        Returns
+        -------
+        List[Tuple[int, int]]
+            List of sampled negative edges for the chunk
         """
         # Remove process_id parameter since we now use unique seeds
         rng = np.random.RandomState(random_state)
@@ -159,7 +253,7 @@ class EdgeDataset:
             
             # Create mask for nodes that are not connected
             mask = ~np.isin(all_nodes, list(connected))
-            mask[node] = False  # Exclude self-loops
+            mask[node] = False
             
             # Get array of possible negative edge targets
             candidates = all_nodes[mask]
@@ -174,23 +268,25 @@ class EdgeDataset:
             # Add the negative edges as tuples
             for target in targets:
                 neg_edges.append((node, target))
-                #print(f"({node}, {target})")
             
         #remove duplicates
         neg_edges = list(set(neg_edges))
         
         return neg_edges
     
-    def _get_adjacency_sets(self, P_sym):
+    def _get_adjacency_sets(self, P_sym: csr_matrix) -> Dict[int, Set[int]]:
         """
         Get the adjacency set for each node in the graph represented by P_sym.
         
-        Parameters:
-        - P_sym: scipy.sparse.csr_matrix, symmetric probability matrix
-        
-        Returns:
-        - adj_sets: list of sets, where adj_sets[i] contains the indices of nodes 
-                connected to node i with non-zero probability
+        Parameters
+        ----------
+        P_sym : csr_matrix
+            Symmetric probability matrix
+            
+        Returns
+        -------
+        Dict[int, Set[int]]
+            Dictionary mapping each node to its set of neighbors
         """
         n_samples = P_sym.shape[0]
         adj_sets = []
