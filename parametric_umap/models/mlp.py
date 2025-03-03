@@ -1,26 +1,53 @@
+import torch
 from torch import nn
 
 
 class MLP(nn.Module):
     """Multi-Layer Perceptron (MLP) with flexible architecture.
 
-    Args:
-        input_dim (int): Dimension of the input features.
-        hidden_dim (int): Dimension of the hidden layers (embedding dimension).
-        output_dim (int): Dimension of the output layer.
-        num_layers (int): Number of hidden layers.
-        use_batchnorm (bool): If True, includes Batch Normalization after each linear layer.
-        use_dropout (bool): If True, includes Dropout after each activation function.
-        dropout_prob (float): Probability of an element to be zeroed. Default: 0.5.
+    A flexible implementation of a Multi-Layer Perceptron that supports:
+    - Variable number of hidden layers
+    - Optional batch normalization
+    - Optional dropout
+    - Configurable hidden dimensions
+
+    Parameters
+    ----------
+    input_dim : int
+        Dimension of the input features
+    hidden_dim : int
+        Dimension of the hidden layers (embedding dimension)
+    output_dim : int
+        Dimension of the output layer
+    num_layers : int, optional (default=2)
+        Number of hidden layers
+    use_batchnorm : bool, optional (default=False)
+        If True, includes Batch Normalization after each linear layer
+    use_dropout : bool, optional (default=False)
+        If True, includes Dropout after each activation function
+    dropout_prob : float, optional (default=0.5)
+        Probability of an element to be zeroed in dropout layers
+
+    Attributes
+    ----------
+    model : nn.Sequential
+        The sequential container of all layers in the network
 
     """
 
     def __init__(
-        self, input_dim, hidden_dim, output_dim, num_layers=2, use_batchnorm=False, use_dropout=False, dropout_prob=0.5
-    ):
+        self,
+        input_dim: int,
+        hidden_dim: int,
+        output_dim: int,
+        num_layers: int = 2,
+        use_batchnorm: bool = False,
+        use_dropout: bool = False,
+        dropout_prob: float = 0.5,
+    ) -> None:
         super(MLP, self).__init__()
 
-        layers = []
+        layers: list[nn.Module] = []
         in_dim = input_dim
 
         for i in range(num_layers):
@@ -51,14 +78,18 @@ class MLP(nn.Module):
         # Combine all layers into a Sequential module
         self.model = nn.Sequential(*layers)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass of the MLP.
 
-        Args:
-            x (torch.Tensor): Input tensor of shape (batch_size, input_dim).
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor of shape (batch_size, input_dim)
 
-        Returns:
-            torch.Tensor: Output tensor of shape (batch_size, output_dim).
+        Returns
+        -------
+        torch.Tensor
+            Output tensor of shape (batch_size, output_dim)
 
         """
         return self.model(x)

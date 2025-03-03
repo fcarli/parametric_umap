@@ -23,7 +23,11 @@ class EdgeBatchIterator:
     """
 
     def __init__(
-        self, edges: list[tuple[int, int]], batch_size: int, shuffle: bool = False, stratify: bool = False
+        self,
+        edges: list[tuple[int, int]],
+        batch_size: int,
+        shuffle: bool = False,
+        stratify: bool = False,
     ) -> None:
         self.edges = edges
         self.batch_size = batch_size
@@ -124,7 +128,7 @@ class EdgeDataset:
         n_processes: int = 6,
         verbose: bool = True,
     ) -> EdgeBatchIterator:
-        """Returns an iterator that yields batches of edges and their probabilities.
+        """Return an iterator that yields batches of edges and their probabilities.
 
         Parameters
         ----------
@@ -168,11 +172,19 @@ class EdgeDataset:
 
         """
         self.neg_edges = self._sample_negative_edges(
-            [src for src, _ in self.pos_edges], random_state=random_state, n_processes=n_processes, verbose=verbose
+            [src for src, _ in self.pos_edges],
+            random_state=random_state,
+            n_processes=n_processes,
+            verbose=verbose,
         )
 
     def _sample_negative_edges(
-        self, node_list: list[int], k: int = 5, random_state: int = 0, n_processes: int = 6, verbose: bool = True
+        self,
+        node_list: list[int],
+        k: int = 5,
+        random_state: int = 0,
+        n_processes: int = 6,
+        verbose: bool = True,
     ) -> list[tuple[int, int]]:
         """Sample k negative edges for each node in parallel.
 
@@ -195,10 +207,7 @@ class EdgeDataset:
             List of sampled negative edges
 
         """
-        if n_processes == -1:
-            n_processes = os.cpu_count()
-        else:
-            n_processes = min(n_processes, os.cpu_count())
+        n_processes = os.cpu_count() if n_processes == -1 else min(n_processes, os.cpu_count())
 
         # Create a base RNG to generate seeds for each process
         base_rng = np.random.RandomState(random_state)
@@ -220,7 +229,7 @@ class EdgeDataset:
                         chunk,
                         k=k,
                         random_state=seed,
-                    )
+                    ),
                 )
 
             # Use position=0 to ensure proper display with nested progress bars
@@ -231,9 +240,13 @@ class EdgeDataset:
         return neg_edges
 
     def _sample_negative_edges_chunk(
-        self, node_list: list[int], k: int = 5, random_state: int | None = None
+        self,
+        node_list: list[int],
+        k: int = 5,
+        random_state: int | None = None,
     ) -> list[tuple[int, int]]:
         """Sample k negative edges for each node in the node list.
+
         A negative edge is an edge between nodes that are not connected in adj_sets.
 
         Parameters

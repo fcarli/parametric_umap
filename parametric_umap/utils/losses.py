@@ -1,3 +1,4 @@
+"""Utility functions for the Parametric UMAP implementation."""
 import torch
 
 
