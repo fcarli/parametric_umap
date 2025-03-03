@@ -1,22 +1,17 @@
-import numpy as np
-import faiss
-from scipy import sparse
-
 import faiss
 import numpy as np
 from scipy import sparse
-import unittest
-import torch
-from typing import Tuple, List, Union
 
-def compute_sigma_i(X: np.ndarray, k: int, tol: float = 1e-5, max_iter: int = 100) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Compute sigma_i for each sample in the dataset using FAISS for k-nearest neighbors.
-    
+
+def compute_sigma_i(
+    X: np.ndarray, k: int, tol: float = 1e-5, max_iter: int = 100
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Compute sigma_i for each sample in the dataset using FAISS for k-nearest neighbors.
+
     This function computes the optimal sigma_i values for each sample that will be used
     in the UMAP probability calculations. It uses binary search to find sigma_i values
     that make the sum of probabilities equal to log2(k).
-    
+
     Parameters
     ----------
     X : np.ndarray
@@ -27,7 +22,7 @@ def compute_sigma_i(X: np.ndarray, k: int, tol: float = 1e-5, max_iter: int = 10
         Tolerance for binary search convergence, by default 1e-5
     max_iter : int, optional
         Maximum iterations for binary search, by default 100
-        
+
     Returns
     -------
     Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
@@ -35,6 +30,7 @@ def compute_sigma_i(X: np.ndarray, k: int, tol: float = 1e-5, max_iter: int = 10
         - rho: Distance to the nearest neighbor for each sample, shape (n_samples,)
         - distances: Euclidean distances to k nearest neighbors, shape (n_samples, k)
         - neighbors: Indices of k nearest neighbors, shape (n_samples, k)
+
     """
     X = X.astype(np.float32)
     n_samples, n_features = X.shape
@@ -97,13 +93,14 @@ def compute_sigma_i(X: np.ndarray, k: int, tol: float = 1e-5, max_iter: int = 10
     return sigma, rho, distances, neighbors
 
 
-def compute_p_umap(sigma: np.ndarray, rho: np.ndarray, distances: np.ndarray, neighbors: np.ndarray) -> sparse.csr_matrix:
-    """
-    Compute the conditional probabilities p(UMAP_{j|i}) for each neighbor pair.
-    
+def compute_p_umap(
+    sigma: np.ndarray, rho: np.ndarray, distances: np.ndarray, neighbors: np.ndarray
+) -> sparse.csr_matrix:
+    """Compute the conditional probabilities p(UMAP_{j|i}) for each neighbor pair.
+
     This function computes the UMAP conditional probabilities using the formula:
     p(j|i) = exp(-max(d_ij - rho_i, 0) / sigma_i)
-    
+
     Parameters
     ----------
     sigma : np.ndarray
@@ -114,11 +111,12 @@ def compute_p_umap(sigma: np.ndarray, rho: np.ndarray, distances: np.ndarray, ne
         Euclidean distances to k nearest neighbors, shape (n_samples, k)
     neighbors : np.ndarray
         Indices of k nearest neighbors, shape (n_samples, k)
-        
+
     Returns
     -------
     sparse.csr_matrix
         Sparse matrix of conditional probabilities p(j|i)
+
     """
     n_samples, k = distances.shape
 
@@ -141,22 +139,23 @@ def compute_p_umap(sigma: np.ndarray, rho: np.ndarray, distances: np.ndarray, ne
 
     return P
 
+
 def compute_p_umap_symmetric(P):
-    """
-    Compute the symmetric UMAP probabilities.
-    
+    """Compute the symmetric UMAP probabilities.
+
     This function computes p^{UMAP}_{ij} using the formula:
     p^{UMAP}_{ij} = p(j|i) + p(i|j) - p(j|i) * p(i|j)
-    
+
     Parameters
     ----------
     P : sparse.csr_matrix
         Matrix of conditional probabilities p(j|i)
-        
+
     Returns
     -------
     sparse.csr_matrix
         Symmetric probability matrix p^{UMAP}_{ij}
+
     """
     # Compute P + P.T
     P_transpose = P.transpose()
@@ -174,14 +173,14 @@ def compute_p_umap_symmetric(P):
     return P_sym
 
 
-def compute_all_p_umap(X: np.ndarray, k: int, tol: float = 1e-5, max_iter: int = 100,
-                      return_dist_and_neigh: bool = False) -> Union[sparse.csr_matrix, Tuple[sparse.csr_matrix, np.ndarray, np.ndarray]]:
-    """
-    Compute symmetric UMAP probabilities for the entire dataset.
-    
+def compute_all_p_umap(
+    X: np.ndarray, k: int, tol: float = 1e-5, max_iter: int = 100, return_dist_and_neigh: bool = False
+) -> sparse.csr_matrix | tuple[sparse.csr_matrix, np.ndarray, np.ndarray]:
+    """Compute symmetric UMAP probabilities for the entire dataset.
+
     This is a wrapper function that combines the computation of sigma values,
     conditional probabilities, and final symmetric probabilities.
-    
+
     Parameters
     ----------
     X : np.ndarray
@@ -194,7 +193,7 @@ def compute_all_p_umap(X: np.ndarray, k: int, tol: float = 1e-5, max_iter: int =
         Maximum iterations for binary search, by default 100
     return_dist_and_neigh : bool, optional
         Whether to return distances and neighbors, by default False
-        
+
     Returns
     -------
     Union[sparse.csr_matrix, Tuple[sparse.csr_matrix, np.ndarray, np.ndarray]]
@@ -204,6 +203,7 @@ def compute_all_p_umap(X: np.ndarray, k: int, tol: float = 1e-5, max_iter: int =
             - P_sym: Symmetric probability matrix
             - distances: Euclidean distances to k nearest neighbors
             - neighbors: Indices of k nearest neighbors
+
     """
     # Step 1: Compute sigma, rho, distances, and neighbors
     sigma, rho, distances, neighbors = compute_sigma_i(X, k, tol, max_iter)
@@ -216,5 +216,4 @@ def compute_all_p_umap(X: np.ndarray, k: int, tol: float = 1e-5, max_iter: int =
 
     if return_dist_and_neigh:
         return P_sym, distances, neighbors
-    else:
-        return P_sym
+    return P_sym
