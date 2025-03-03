@@ -1,3 +1,5 @@
+"""Parametric UMAP implementation for dimensionality reduction using neural networks."""
+
 import numpy as np
 import torch
 from torch import nn
@@ -12,22 +14,47 @@ from parametric_umap.utils.losses import compute_correlation_loss
 
 
 class ParametricUMAP:
+    """A parametric implementation of UMAP (Uniform Manifold Approximation and Projection).
+
+    This class implements a parametric version of UMAP that learns a neural network to perform
+    dimensionality reduction. The model can transform new data points without having to recompute
+    the entire embedding.
+
+    Attributes:
+        n_components (int): Number of dimensions in the output embedding
+        hidden_dim (int): Dimension of hidden layers in the MLP
+        n_layers (int): Number of hidden layers in the MLP
+        n_neighbors (int): Number of neighbors to consider for each point
+        a (float): UMAP parameter controlling local connectivity
+        b (float): UMAP parameter controlling the strength of repulsion between points
+        correlation_weight (float): Weight of the correlation loss term
+        learning_rate (float): Learning rate for the optimizer
+        n_epochs (int): Number of training epochs
+        batch_size (int): Batch size for training
+        device (str): Device to use for computations ('cpu' or 'cuda')
+        use_batchnorm (bool): Whether to use batch normalization in the MLP
+        use_dropout (bool): Whether to use dropout in the MLP
+        model (Optional[MLP]): The neural network model
+        is_fitted (bool): Whether the model has been fitted
+
+    """
+
     def __init__(
         self,
-        n_components=2,
-        hidden_dim=1024,
-        n_layers=3,
-        n_neighbors=15,
-        a=0.1,
-        b=1.0,
-        correlation_weight=0.1,
-        learning_rate=1e-4,
-        n_epochs=10,
-        batch_size=32,
-        device="cuda" if torch.cuda.is_available() else "cpu",
-        use_batchnorm=False,
-        use_dropout=False,
-    ):
+        n_components: int = 2,
+        hidden_dim: int = 1024,
+        n_layers: int = 3,
+        n_neighbors: int = 15,
+        a: float = 0.1,
+        b: float = 1.0,
+        correlation_weight: float = 0.1,
+        learning_rate: float = 1e-4,
+        n_epochs: int = 10,
+        batch_size: int = 32,
+        device: str = "cuda" if torch.cuda.is_available() else "cpu",
+        use_batchnorm: bool = False,
+        use_dropout: bool = False,
+    ) -> None:
         """Initialize ParametricUMAP.
 
         Parameters
@@ -38,6 +65,8 @@ class ParametricUMAP:
             Dimension of hidden layers in the MLP
         n_layers : int
             Number of hidden layers in the MLP
+        n_neighbors : int
+            Number of neighbors to consider for each point
         a, b : float
             UMAP parameters for the optimization
         correlation_weight : float
@@ -50,6 +79,10 @@ class ParametricUMAP:
             Batch size for training
         device : str
             Device to use for computations ('cpu' or 'cuda')
+        use_batchnorm : bool
+            Whether to use batch normalization in the MLP
+        use_dropout : bool
+            Whether to use dropout in the MLP
 
         """
         self.n_components = n_components
@@ -70,8 +103,15 @@ class ParametricUMAP:
         self.loss_fn = nn.BCELoss()
         self.is_fitted = False
 
-    def _init_model(self, input_dim):
-        """Initialize the MLP model"""
+    def _init_model(self, input_dim: int) -> None:
+        """Initialize the MLP model.
+
+        Parameters
+        ----------
+        input_dim : int
+            The input dimension of the data
+
+        """
         self.model = MLP(
             input_dim=input_dim,
             hidden_dim=self.hidden_dim,
@@ -81,20 +121,36 @@ class ParametricUMAP:
             use_dropout=self.use_dropout,
         ).to(self.device)
 
-    def fit(self, X, y=None, resample_negatives=False, n_processes=6, low_memory=False, random_state=0, verbose=True):
+    def fit(
+        self,
+        X: np.ndarray | torch.Tensor,
+        resample_negatives: bool = False,
+        n_processes: int = 6,
+        low_memory: bool = False,
+        random_state: int = 0,
+        verbose: bool = True,
+    ) -> "ParametricUMAP":
         """Fit the model using X as training data.
 
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
-            Training data
-        y : Ignored
-            Not used, present for API consistency
+            Training data. Can be numpy array or torch tensor.
+        resample_negatives : bool, optional (default=False)
+            Whether to resample negative edges at each epoch.
+        n_processes : int, optional (default=6)
+            Number of processes to use for parallel computation.
+        low_memory : bool, optional (default=False)
+            If True, keeps the dataset on CPU to save GPU memory.
+        random_state : int, optional (default=0)
+            Random state for reproducibility.
+        verbose : bool, optional (default=True)
+            Whether to display progress bars and print statements.
 
         Returns
         -------
-        self : object
-            Returns the instance itself
+        self : ParametricUMAP
+            The fitted model.
 
         """
         X = np.asarray(X).astype(np.float32)
@@ -108,12 +164,7 @@ class ParametricUMAP:
         P_sym = compute_all_p_umap(X, k=self.n_neighbors)
         ed = EdgeDataset(P_sym)
 
-        if low_memory:
-            target_dataset = TorchSparseDataset(P_sym)
-        else:
-            target_dataset = TorchSparseDataset(P_sym).to(
-                self.device,
-            )  # if the dataset is not too big, it's better to keep it on GPU for faster computation
+        target_dataset = TorchSparseDataset(P_sym) if low_memory else TorchSparseDataset(P_sym).to(self.device)
 
         # Initialize optimizer
         optimizer = AdamW(self.model.parameters(), lr=self.learning_rate)
@@ -191,18 +242,23 @@ class ParametricUMAP:
         self.is_fitted = True
         return self
 
-    def transform(self, X):
+    def transform(self, X: np.ndarray | torch.Tensor) -> np.ndarray:
         """Apply dimensionality reduction to X.
 
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
-            New data to transform
+            New data to transform. Can be numpy array or torch tensor.
 
         Returns
         -------
-        X_new : array-like of shape (n_samples, n_components)
-            Transformed data
+        X_new : ndarray of shape (n_samples, n_components)
+            Transformed data in the low-dimensional space.
+
+        Raises
+        ------
+        RuntimeError
+            If the model has not been fitted.
 
         """
         if not self.is_fitted:
@@ -216,30 +272,44 @@ class ParametricUMAP:
 
         return X_reduced.cpu().numpy()
 
-    def fit_transform(self, X, verbose=True, low_memory=False):
+    def fit_transform(
+        self,
+        X: np.ndarray | torch.Tensor,
+        verbose: bool = True,
+        low_memory: bool = False,
+    ) -> np.ndarray:
         """Fit the model with X and apply the dimensionality reduction on X.
 
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
-            Training data
+            Training data. Can be numpy array or torch tensor.
+        verbose : bool, optional (default=True)
+            Whether to display progress bars and print statements.
+        low_memory : bool, optional (default=False)
+            If True, keeps the dataset on CPU to save GPU memory.
 
         Returns
         -------
-        X_new : array-like of shape (n_samples, n_components)
-            Transformed data
+        X_new : ndarray of shape (n_samples, n_components)
+            Transformed data in the low-dimensional space.
 
         """
         self.fit(X, verbose=verbose, low_memory=low_memory)
         return self.transform(X)
 
-    def save(self, path):
+    def save(self, path: str) -> None:
         """Save the model to a file.
 
         Parameters
         ----------
         path : str
-            Path to save the model
+            Path to save the model.
+
+        Raises
+        ------
+        RuntimeError
+            If the model has not been fitted.
 
         """
         if not self.is_fitted:
@@ -260,20 +330,20 @@ class ParametricUMAP:
         torch.save(save_dict, path)
 
     @classmethod
-    def load(cls, path, device="cuda" if torch.cuda.is_available() else "cpu"):
+    def load(cls, path: str, device: str = "cuda" if torch.cuda.is_available() else "cpu") -> "ParametricUMAP":
         """Load a saved model.
 
         Parameters
         ----------
         path : str
-            Path to the saved model
-        device : str
-            Device to load the model to
+            Path to the saved model.
+        device : str, optional (default='cuda' if available else 'cpu')
+            Device to load the model to.
 
         Returns
         -------
         model : ParametricUMAP
-            Loaded model
+            The loaded model instance.
 
         """
         save_dict = torch.load(path, map_location=device)

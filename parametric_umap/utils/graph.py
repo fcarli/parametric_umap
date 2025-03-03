@@ -4,7 +4,10 @@ from scipy import sparse
 
 
 def compute_sigma_i(
-    X: np.ndarray, k: int, tol: float = 1e-5, max_iter: int = 100
+    X: np.ndarray,
+    k: int,
+    tol: float = 1e-5,
+    max_iter: int = 100,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Compute sigma_i for each sample in the dataset using FAISS for k-nearest neighbors.
 
@@ -94,7 +97,10 @@ def compute_sigma_i(
 
 
 def compute_p_umap(
-    sigma: np.ndarray, rho: np.ndarray, distances: np.ndarray, neighbors: np.ndarray
+    sigma: np.ndarray,
+    rho: np.ndarray,
+    distances: np.ndarray,
+    neighbors: np.ndarray,
 ) -> sparse.csr_matrix:
     """Compute the conditional probabilities p(UMAP_{j|i}) for each neighbor pair.
 
@@ -140,7 +146,7 @@ def compute_p_umap(
     return P
 
 
-def compute_p_umap_symmetric(P):
+def compute_p_umap_symmetric(P: sparse.csr_matrix) -> sparse.csr_matrix:
     """Compute the symmetric UMAP probabilities.
 
     This function computes p^{UMAP}_{ij} using the formula:
@@ -155,6 +161,14 @@ def compute_p_umap_symmetric(P):
     -------
     sparse.csr_matrix
         Symmetric probability matrix p^{UMAP}_{ij}
+
+    Notes
+    -----
+    The function performs the following steps:
+    1. Computes P + P.T for the first term
+    2. Computes P * P.T (element-wise) for the second term
+    3. Subtracts the product from the sum
+    4. Eliminates zeros to maintain sparsity
 
     """
     # Compute P + P.T
@@ -174,7 +188,11 @@ def compute_p_umap_symmetric(P):
 
 
 def compute_all_p_umap(
-    X: np.ndarray, k: int, tol: float = 1e-5, max_iter: int = 100, return_dist_and_neigh: bool = False
+    X: np.ndarray,
+    k: int,
+    tol: float = 1e-5,
+    max_iter: int = 100,
+    return_dist_and_neigh: bool = False,
 ) -> sparse.csr_matrix | tuple[sparse.csr_matrix, np.ndarray, np.ndarray]:
     """Compute symmetric UMAP probabilities for the entire dataset.
 
