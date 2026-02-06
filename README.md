@@ -36,7 +36,7 @@ X, color = make_swiss_roll(n_samples=n_samples, random_state=42)
 
 # Initialize and fit the model
 pumap = ParametricUMAP(
-    device='cuda:0'
+    device='cuda:0',
     n_components=2,
     hidden_dim=128,
     n_layers=3,
