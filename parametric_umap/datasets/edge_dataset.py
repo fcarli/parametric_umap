@@ -1,3 +1,6 @@
+"""Edge dataset classes for graph-based training of parametric UMAP."""
+
+import multiprocessing
 import os
 from concurrent.futures import ProcessPoolExecutor
 
@@ -29,6 +32,7 @@ class EdgeBatchIterator:
         shuffle: bool = False,
         stratify: bool = False,
     ) -> None:
+        """Initialize the edge batch iterator."""
         self.edges = edges
         self.batch_size = batch_size
         self.shuffle = shuffle
@@ -37,6 +41,7 @@ class EdgeBatchIterator:
         self.stratify = stratify
 
     def __iter__(self) -> "EdgeBatchIterator":
+        """Return the iterator, optionally shuffling edges."""
         if self.shuffle:
             # Create a copy to avoid modifying original edges
             self.current_edges = self.edges.copy()
@@ -52,6 +57,7 @@ class EdgeBatchIterator:
         return self
 
     def __next__(self) -> list[tuple[int, int]]:
+        """Return the next batch of edges."""
         if self.current_edges is None:
             raise StopIteration
 
@@ -63,6 +69,7 @@ class EdgeBatchIterator:
         return edge_batch
 
     def __len__(self) -> int:
+        """Return the number of batches."""
         return (len(self.current_edges) + self.batch_size - 1) // self.batch_size
 
 
@@ -77,6 +84,7 @@ class EdgeDataset:
     """
 
     def __init__(self, P_sym: csr_matrix) -> None:
+        """Initialize the edge dataset from a symmetric probability matrix."""
         self.adj_sets: dict[int, set[int]] = self._get_adjacency_sets(P_sym)
 
         P_sym_dok = P_sym.todok()
@@ -99,7 +107,6 @@ class EdgeDataset:
 
         # Apply permutation to edges
         self.all_edges = [self.all_edges[i] for i in perm]
-        # self.all_edges_prob = [self.all_edges_prob[i] for i in perm]
 
     def sample_and_shuffle(self, random_state: int = 0, n_processes: int = 6, verbose: bool = True) -> None:
         """Sample negative edges and shuffle all edges.
@@ -116,7 +123,6 @@ class EdgeDataset:
         """
         self.sample_negative_edges(random_state=random_state, n_processes=n_processes, verbose=verbose)
         self.all_edges = self.pos_edges + self.neg_edges
-        # self.all_edges_prob = self.pos_edges_prob.extend(self.neg_edges_prob)
 
         self._shuffle_edges(random_state=random_state)
 
@@ -209,6 +215,13 @@ class EdgeDataset:
         """
         n_processes = os.cpu_count() if n_processes == -1 else min(n_processes, os.cpu_count())
 
+        if verbose:
+            print("Sampling negative edges...")
+
+        # Fast path: skip multiprocessing overhead when single-threaded
+        if n_processes <= 1:
+            return self._sample_negative_edges_chunk(node_list, k=k, random_state=random_state)
+
         # Create a base RNG to generate seeds for each process
         base_rng = np.random.RandomState(random_state)
         process_seeds = base_rng.randint(0, np.iinfo(np.int32).max, size=n_processes)
@@ -216,13 +229,13 @@ class EdgeDataset:
         # Split node_list into chunks
         node_chunks = np.array_split(node_list, n_processes)
 
-        if verbose:
-            print("Sampling negative edges...")
-
-        # Run parallel processing with unique seeds
-        with ProcessPoolExecutor(max_workers=n_processes) as executor:
+        # Use "spawn" context to avoid deadlocks when OpenMP / PyTorch / FAISS
+        # have already been loaded in the parent process (default "fork" on
+        # macOS copies the OMP runtime state and can hang or segfault).
+        ctx = multiprocessing.get_context("spawn")
+        with ProcessPoolExecutor(max_workers=n_processes, mp_context=ctx) as executor:
             futures = []
-            for i, (chunk, seed) in enumerate(zip(node_chunks, process_seeds, strict=False)):
+            for chunk, seed in zip(node_chunks, process_seeds, strict=False):
                 futures.append(
                     executor.submit(
                         self._sample_negative_edges_chunk,
@@ -292,8 +305,7 @@ class EdgeDataset:
                 targets = candidates
 
             # Add the negative edges as tuples
-            for target in targets:
-                neg_edges.append((node, target))
+            neg_edges.extend((node, target) for target in targets)
 
         # remove duplicates
         neg_edges = list(set(neg_edges))
@@ -321,8 +333,7 @@ class EdgeDataset:
         P_coo = P_sym.tocoo()
 
         # Initialize empty sets for each node
-        for _ in range(n_samples):
-            adj_sets.append(set())
+        adj_sets = [set() for _ in range(n_samples)]
 
         # Iterate through non-zero elements and add to adjacency sets
         for i, j, val in zip(P_coo.row, P_coo.col, P_coo.data, strict=False):

@@ -51,7 +51,7 @@ class ParametricUMAP:
         learning_rate: float = 1e-4,
         n_epochs: int = 10,
         batch_size: int = 32,
-        device: str = "cuda" if torch.cuda.is_available() else "cpu",
+        device: str | None = None,
         use_batchnorm: bool = False,
         use_dropout: bool = False,
     ) -> None:
@@ -77,8 +77,9 @@ class ParametricUMAP:
             Number of training epochs
         batch_size : int
             Batch size for training
-        device : str
-            Device to use for computations ('cpu' or 'cuda')
+        device : str, optional
+            Device to use for computations ('cpu', 'cuda', or 'mps').
+            Auto-detected if not specified (CUDA > MPS > CPU).
         use_batchnorm : bool
             Whether to use batch normalization in the MLP
         use_dropout : bool
@@ -95,6 +96,13 @@ class ParametricUMAP:
         self.learning_rate = learning_rate
         self.n_epochs = n_epochs
         self.batch_size = batch_size
+        if device is None:
+            if torch.cuda.is_available():
+                device = "cuda"
+            elif torch.backends.mps.is_available():
+                device = "mps"
+            else:
+                device = "cpu"
         self.device = device
         self.use_batchnorm = use_batchnorm
         self.use_dropout = use_dropout
@@ -164,7 +172,12 @@ class ParametricUMAP:
         P_sym = compute_all_p_umap(X, k=self.n_neighbors)
         ed = EdgeDataset(P_sym)
 
-        target_dataset = TorchSparseDataset(P_sym) if low_memory else TorchSparseDataset(P_sym).to(self.device)
+        # TorchSparseDataset uses a plain dict internally, so it is always
+        # lightweight and device-independent.  In low_memory mode we keep the
+        # returned tensors on CPU and transfer per batch; otherwise they are
+        # created directly on the compute device.
+        _sparse_on_cpu = low_memory
+        target_dataset = TorchSparseDataset(P_sym) if _sparse_on_cpu else TorchSparseDataset(P_sym).to(self.device)
 
         # Initialize optimizer
         optimizer = AdamW(self.model.parameters(), lr=self.learning_rate)
@@ -201,8 +214,8 @@ class ParametricUMAP:
                 dst_values = dataset[dst_indexes]
                 targets = target_dataset[edge_batch]
 
-                # If low memory, the dataset is not on GPU, so we need to move the values to GPU
-                if low_memory:
+                # If sparse data lives on CPU, move batch tensors to the compute device
+                if _sparse_on_cpu:
                     src_values = src_values.to(self.device)
                     dst_values = dst_values.to(self.device)
                     targets = targets.to(self.device)
@@ -330,15 +343,15 @@ class ParametricUMAP:
         torch.save(save_dict, path)
 
     @classmethod
-    def load(cls, path: str, device: str = "cuda" if torch.cuda.is_available() else "cpu") -> "ParametricUMAP":
+    def load(cls, path: str, device: str | None = None) -> "ParametricUMAP":
         """Load a saved model.
 
         Parameters
         ----------
         path : str
             Path to the saved model.
-        device : str, optional (default='cuda' if available else 'cpu')
-            Device to load the model to.
+        device : str, optional
+            Device to load the model to. Auto-detected if not specified.
 
         Returns
         -------
@@ -346,7 +359,14 @@ class ParametricUMAP:
             The loaded model instance.
 
         """
-        save_dict = torch.load(path, map_location=device)
+        if device is None:
+            if torch.cuda.is_available():
+                device = "cuda"
+            elif torch.backends.mps.is_available():
+                device = "mps"
+            else:
+                device = "cpu"
+        save_dict = torch.load(path, map_location=device, weights_only=True)
 
         # Create instance with saved parameters
         instance = cls(

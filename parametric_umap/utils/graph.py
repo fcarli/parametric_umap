@@ -1,3 +1,5 @@
+"""Graph construction utilities for computing UMAP probabilities."""
+
 import faiss
 import numpy as np
 from scipy import sparse

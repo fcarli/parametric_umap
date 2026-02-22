@@ -7,44 +7,176 @@ authors = [
 ]
 license = {text = "BSD License"}
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
 dependencies = [
-    "numpy (>=2.2.3,<3.0.0)",
-    "scipy (>=1.15.2,<2.0.0)",
-    "tqdm (>=4.67.1,<5.0.0)",
-    "faiss-cpu (>=1.10.0,<2.0.0)",
-    "torch (>=2.6.0,<3.0.0)",
+    "numpy>=2.2.3",
+    "scipy>=1.15.2",
+    "tqdm>=4.67.1",
+    "faiss-cpu>=1.10.0",
+    "torch>=2.3.1",
 ]
 
+[project.urls]
+Homepage = "https://github.com/fcarli/parametric_umap"
+Repository = "https://github.com/fcarli/parametric_umap"
+Issues = "https://github.com/fcarli/parametric_umap/issues"
+Changelog = "https://github.com/fcarli/parametric_umap/blob/main/CHANGELOG.md"
+
+[tool.uv]
+conflicts = [
+  [
+    { extra = "cpu" },
+    { extra = "cu118" },
+    { extra = "cu121" },
+    { extra = "cu124" },
+    { extra = "cu126" },
+    { extra = "cu128" },
+  ],
+]
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cpu", marker = "sys_platform != 'linux'" },
+  { index = "pytorch-cpu", marker = "sys_platform == 'linux'", extra = "cpu" },
+  { index = "pytorch-cu118", marker = "sys_platform == 'linux'", extra = "cu118" },
+  { index = "pytorch-cu121", marker = "sys_platform == 'linux'", extra = "cu121" },
+  { index = "pytorch-cu124", marker = "sys_platform == 'linux'", extra = "cu124" },
+  { index = "pytorch-cu126", marker = "sys_platform == 'linux'", extra = "cu126" },
+  { index = "pytorch-cu128", marker = "sys_platform == 'linux'", extra = "cu128" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-
-[tool.poetry.dependencies]
-
-[tool.poetry.group.dev.dependencies]
-ruff = "^0.9.9"
-ipykernel = "^6.29.5"
-jupyter = "^1.1.1"
-
-
-[tool.poetry.group.examples.dependencies]
-scikit-learn = "^1.6.1"
-matplotlib = "^3.10.1"
+[project.optional-dependencies]
+cpu = ["torch>=2.3.1"]
+cu118 = ["torch>=2.3.1"]
+cu121 = ["torch>=2.3.1"]
+cu124 = ["torch>=2.3.1"]
+cu126 = ["torch>=2.3.1"]
+cu128 = ["torch>=2.3.1"]
+dev = [
+    "ruff>=0.9.9",
+    "pre-commit>=4.0.0",
+    "ipykernel>=6.29.5",
+    "jupyter>=1.1.1",
+]
+examples = [
+    "scikit-learn>=1.6.1",
+    "matplotlib>=3.10.1",
+]
+test = [
+    "pytest>=8.0.0",
+    "pytest-cov>=6.0.0",
+    "pytest-xdist>=3.6.0",
+    "pytest-mock>=3.14.0",
+    "hypothesis>=6.100.0",
+    "sympy>=1.13.0",
+]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 120
 
 [tool.ruff.lint]
 select = ["ALL"]
+ignore = [
+    # Style rules that conflict with project conventions
+    "COM812",  # Trailing comma conflicts with ruff formatter
+    "D203",    # Conflicts with D211 (no-blank-line-before-class)
+    "D213",    # Conflicts with D212 (multi-line-summary-first-line)
+
+    # Rules too strict for ML/scientific computing
+    "N803",    # Argument name should be lowercase (X, Z are standard ML notation)
+    "N806",    # Variable name should be lowercase (same reason)
+    "FBT",     # Boolean positional/default arguments (common for ML config params)
+    "PLR0913", # Too many function arguments (ML models naturally have many params)
+    "PLR2004", # Magic values in comparisons (common in tests and ML code)
+
+    # Annotation rules (separate effort)
+    "ANN",     # Type annotations not yet complete across codebase
+
+    # Exception message style (too strict)
+    "TRY003",  # Long exception messages
+    "EM101",   # Exception string literals
+
+    # Readability preferences (keep explicit names before return)
+    "RET504",  # Unnecessary assignment before return
+    "SIM108",  # Ternary operator (if/else blocks often clearer)
+
+    # Noise for this project
+    "NPY002",  # Legacy numpy.random (works fine, large refactor to change)
+    "W505",    # Doc line too long (already have 120 char line length)
+    "INP001",  # Missing __init__.py (false positives for examples dir)
+    "T201",    # Print statements (used in examples and verbose output)
+    "ERA001",  # Commented-out code (false positives on descriptive comments)
+    "TD002",   # Missing author in TODO
+    "TD003",   # Missing issue link in TODO
+    "FIX002",  # Line contains TODO
+]
 
 [tool.ruff.lint.pycodestyle]
 max-doc-length = 90
 
 [tool.ruff.lint.per-file-ignores]
-"test/*" = ["S101", "D100", "D103", "D104"]
+"tests/*" = ["S101", "SLF001", "ARG", "PT006", "PT012", "PLC0415"]
+"parametric_umap/datasets/covariates_datasets.py" = ["SLF001"]  # torch sparse _nnz() has no public API
 
-
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--verbose",
+    "--cov=parametric_umap",
+    "--cov-report=term-missing",
+    "--cov-fail-under=30",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]

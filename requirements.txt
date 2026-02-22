@@ -1,6 +1,0 @@
-numpy
-scipy
-torch
-faiss-cpu  # or faiss-gpu
-tqdm
-scikit-learn

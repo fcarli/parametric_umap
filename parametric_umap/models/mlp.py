@@ -1,3 +1,5 @@
+"""Multi-layer perceptron architectures for parametric UMAP embedding."""
+
 import torch
 from torch import nn
 
@@ -45,12 +47,13 @@ class MLP(nn.Module):
         use_dropout: bool = False,
         dropout_prob: float = 0.5,
     ) -> None:
-        super(MLP, self).__init__()
+        """Initialize the MLP with the given architecture configuration."""
+        super().__init__()
 
         layers: list[nn.Module] = []
         in_dim = input_dim
 
-        for i in range(num_layers):
+        for _ in range(num_layers):
             # Linear layer
             layers.append(nn.Linear(in_dim, hidden_dim))
 
@@ -70,10 +73,6 @@ class MLP(nn.Module):
 
         # Final output layer
         layers.append(nn.Linear(in_dim, output_dim))
-
-        # Optionally, you can add an activation function for the output
-        # For example, use Sigmoid for binary classification or Softmax for multi-class
-        # layers.append(nn.Softmax(dim=1))
 
         # Combine all layers into a Sequential module
         self.model = nn.Sequential(*layers)
