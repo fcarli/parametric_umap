@@ -93,6 +93,12 @@ Note that by default the data is moved to the specified device before training t
 embeddings = pumap.fit_transform(X, low_memory=True)
 ```
 
+Similarly, `transform()` sends the entire input to the device in a single forward pass. For very large inputs that don't fit in memory, pass `batch_size` to process in chunks:
+
+```python
+new_embeddings = pumap.transform(X_new, batch_size=4096)
+```
+
 ## Key Parameters
 
 **UMAP parameters**

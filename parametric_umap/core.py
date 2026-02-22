@@ -289,13 +289,17 @@ class ParametricUMAP:
         self.is_fitted = True
         return self
 
-    def transform(self, X: np.ndarray | torch.Tensor) -> np.ndarray:
+    def transform(self, X: np.ndarray | torch.Tensor, *, batch_size: int | None = None) -> np.ndarray:
         """Apply dimensionality reduction to X.
 
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
             New data to transform. Can be numpy array or torch tensor.
+        batch_size : int, optional
+            If provided, process the input in batches of this size to avoid
+            out-of-memory errors on large inputs. By default the entire input
+            is processed in a single forward pass.
 
         Returns
         -------
@@ -317,12 +321,17 @@ class ParametricUMAP:
             raise ValueError(msg)
 
         self.model.eval()
-        X = torch.as_tensor(X, dtype=torch.float32).to(self.device)
 
         with torch.no_grad():
-            X_reduced = self.model(X)
+            if batch_size is None:
+                X_t = torch.as_tensor(X, dtype=torch.float32).to(self.device)
+                return self.model(X_t).cpu().numpy()
 
-        return X_reduced.cpu().numpy()
+            parts = []
+            for start in range(0, X.shape[0], batch_size):
+                batch = torch.as_tensor(X[start : start + batch_size], dtype=torch.float32).to(self.device)
+                parts.append(self.model(batch).cpu())
+            return torch.cat(parts, dim=0).numpy()
 
     def fit_transform(
         self,
