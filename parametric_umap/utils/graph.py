@@ -45,9 +45,19 @@ def compute_sigma_i(
     index.add(X)
     distances_sq, neighbors = index.search(X, k + 1)  # Include self as the 0th neighbor
 
-    # Remove self distances and neighbors
-    distances_sq = distances_sq[:, 1:].astype(np.float32)  # Shape: (n_samples, k)
-    neighbors = neighbors[:, 1:]
+    # Remove self-matches by index, not position (handles exact duplicates correctly)
+    self_indices = np.arange(n_samples)[:, np.newaxis]
+    is_self = neighbors == self_indices
+    # If self not found among results (shouldn't happen), fall back to removing position 0
+    no_self = ~is_self.any(axis=1)
+    is_self[no_self, 0] = True
+    # For rows with multiple self-matches (impossible with unique indices), keep only the first
+    first_self = is_self.argmax(axis=1)
+    is_self[:] = False
+    is_self[np.arange(n_samples), first_self] = True
+    keep = ~is_self
+    distances_sq = distances_sq[keep].reshape(n_samples, k).astype(np.float32)
+    neighbors = neighbors[keep].reshape(n_samples, k)
 
     # Convert squared distances to Euclidean distances
     distances = np.sqrt(np.maximum(distances_sq, 0)).astype(np.float32)
