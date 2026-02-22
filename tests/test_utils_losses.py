@@ -58,27 +58,27 @@ class TestComputeCorrelationLoss:
         X_distances = torch.tensor([2.0, 2.0, 2.0, 2.0])
         Z_distances = torch.tensor([3.0, 3.0, 3.0, 3.0])
 
-        # Zero variance results in NaN correlation
+        # Zero variance should return a finite value near zero (epsilon-guarded)
         loss = compute_correlation_loss(X_distances, Z_distances)
-        assert torch.isnan(loss)
+        assert torch.isfinite(loss)
 
     def test_zero_variance_single_input(self):
         """Test with zero variance in one input."""
         X_distances = torch.tensor([1.0, 2.0, 3.0, 4.0])  # Has variance
         Z_distances = torch.tensor([5.0, 5.0, 5.0, 5.0])  # No variance
 
-        # Zero variance in one input results in NaN correlation
+        # Zero variance in one input should return a finite value (epsilon-guarded)
         loss = compute_correlation_loss(X_distances, Z_distances)
-        assert torch.isnan(loss)
+        assert torch.isfinite(loss)
 
     def test_single_element(self):
         """Test with single element tensors."""
         X_distances = torch.tensor([1.0])
         Z_distances = torch.tensor([2.0])
 
-        # Single element has no variance, results in NaN
+        # Single element has no variance, should return finite value (epsilon-guarded)
         loss = compute_correlation_loss(X_distances, Z_distances)
-        assert torch.isnan(loss)
+        assert torch.isfinite(loss)
 
     def test_two_elements(self):
         """Test with two element tensors."""

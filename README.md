@@ -93,6 +93,12 @@ Note that by default the data is moved to the specified device before training t
 embeddings = pumap.fit_transform(X, low_memory=True)
 ```
 
+Similarly, `transform()` sends the entire input to the device in a single forward pass. For very large inputs that don't fit in memory, pass `batch_size` to process in chunks:
+
+```python
+new_embeddings = pumap.transform(X_new, batch_size=4096)
+```
+
 ## Key Parameters
 
 **UMAP parameters**
@@ -111,6 +117,7 @@ embeddings = pumap.fit_transform(X, low_memory=True)
 - `batch_size`: Training batch size (default: 32)
 - `use_batchnorm`: Whether to use batch normalization in the embedding MLP (default: False)
 - `use_dropout`: Whether to use dropout in the embedding MLP (default: False)
+- `compile_model`: Apply `torch.compile` to the MLP for faster training on PyTorch 2.x (default: False). Adds a one-time compilation delay on the first forward pass
 
 ## Development
 

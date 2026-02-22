@@ -162,7 +162,13 @@ class TestParametricUMAPFitTransform:
 
             result = pumap.fit_transform(sample_2d_data)
 
-            mock_fit.assert_called_once_with(sample_2d_data, verbose=True, low_memory=False)
+            mock_fit.assert_called_once_with(
+                sample_2d_data,
+                resample_negatives=False,
+                low_memory=False,
+                random_state=0,
+                verbose=True,
+            )
             mock_transform.assert_called_once_with(sample_2d_data)
             np.testing.assert_array_equal(result, expected_result)
 
@@ -176,7 +182,13 @@ class TestParametricUMAPFitTransform:
 
             pumap.fit_transform(sample_2d_data, verbose=False, low_memory=True)
 
-            mock_fit.assert_called_once_with(sample_2d_data, verbose=False, low_memory=True)
+            mock_fit.assert_called_once_with(
+                sample_2d_data,
+                resample_negatives=False,
+                low_memory=True,
+                random_state=0,
+                verbose=False,
+            )
 
 
 class TestParametricUMAPPersistence:

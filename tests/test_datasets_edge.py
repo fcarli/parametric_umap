@@ -12,72 +12,70 @@ from parametric_umap.datasets.edge_dataset import EdgeBatchIterator, EdgeDataset
 class TestEdgeBatchIterator:
     """Test EdgeBatchIterator class."""
 
-    def test_basic_initialization(self, edge_list_data):
-        """Test basic initialization with edge list."""
-        edges = [(0, 1), (1, 2), (2, 3), (3, 4)]
+    def test_basic_initialization(self):
+        """Test basic initialization with numpy arrays."""
+        edges = np.array([[0, 1], [1, 2], [2, 3], [3, 4]], dtype=np.int64)
+        weights = np.array([1.0, 0.5, 0.8, 0.3], dtype=np.float32)
         batch_size = 2
 
-        iterator = EdgeBatchIterator(edges, batch_size)
+        iterator = EdgeBatchIterator(edges, weights, batch_size)
 
-        assert iterator.edges == edges
+        np.testing.assert_array_equal(iterator.edges, edges)
+        np.testing.assert_array_equal(iterator.weights, weights)
         assert iterator.batch_size == batch_size
         assert iterator.shuffle is False
-        assert iterator.stratify is False
         assert iterator.current == 0
 
-    def test_initialization_with_options(self):
-        """Test initialization with shuffle and stratify options."""
-        edges = [(0, 1), (1, 2), (2, 3)]
+    def test_initialization_with_shuffle(self):
+        """Test initialization with shuffle option."""
+        edges = np.array([[0, 1], [1, 2], [2, 3]], dtype=np.int64)
+        weights = np.array([1.0, 0.5, 0.8], dtype=np.float32)
 
-        iterator = EdgeBatchIterator(edges, batch_size=2, shuffle=True, stratify=True)
+        iterator = EdgeBatchIterator(edges, weights, batch_size=2, shuffle=True)
 
         assert iterator.shuffle is True
-        assert iterator.stratify is True
 
     def test_iter_without_shuffle(self):
         """Test iteration without shuffling."""
-        edges = [(0, 1), (1, 2), (2, 3), (3, 4)]
-        iterator = EdgeBatchIterator(edges, batch_size=2, shuffle=False)
+        edges = np.array([[0, 1], [1, 2], [2, 3], [3, 4]], dtype=np.int64)
+        weights = np.array([1.0, 0.5, 0.8, 0.3], dtype=np.float32)
+        iterator = EdgeBatchIterator(edges, weights, batch_size=2, shuffle=False)
 
-        # Start iteration
         iter_obj = iter(iterator)
         assert iter_obj is iterator
-
-        # Check that edges are not shuffled
-        assert iterator.current_edges == edges
+        assert iterator._perm is None
         assert iterator.current == 0
 
     def test_iter_with_shuffle(self):
-        """Test iteration with shuffling."""
-        edges = [(0, 1), (1, 2), (2, 3), (3, 4)]
-        iterator = EdgeBatchIterator(edges, batch_size=2, shuffle=True)
+        """Test iteration with shuffling creates a permutation."""
+        edges = np.array([[0, 1], [1, 2], [2, 3], [3, 4]], dtype=np.int64)
+        weights = np.array([1.0, 0.5, 0.8, 0.3], dtype=np.float32)
+        iterator = EdgeBatchIterator(edges, weights, batch_size=2, shuffle=True)
 
-        # Set seed for reproducibility
         np.random.seed(42)
         iter(iterator)
 
-        # Check that original edges are not modified
-        assert iterator.edges == edges
-
-        # Check that current_edges might be different (shuffled)
-        # Note: might be same by chance, so we just check it's a copy
-        assert iterator.current_edges is not iterator.edges
+        assert iterator._perm is not None
+        assert len(iterator._perm) == len(edges)
 
     def test_next_basic_batching(self):
         """Test basic batching functionality."""
-        edges = [(0, 1), (1, 2), (2, 3), (3, 4)]
-        iterator = EdgeBatchIterator(edges, batch_size=2)
+        edges = np.array([[0, 1], [1, 2], [2, 3], [3, 4]], dtype=np.int64)
+        weights = np.array([1.0, 0.5, 0.8, 0.3], dtype=np.float32)
+        iterator = EdgeBatchIterator(edges, weights, batch_size=2)
 
         iter_obj = iter(iterator)
 
         # First batch
-        batch1 = next(iter_obj)
-        assert batch1 == [(0, 1), (1, 2)]
+        batch_edges, batch_weights, _idx = next(iter_obj)
+        np.testing.assert_array_equal(batch_edges, [[0, 1], [1, 2]])
+        np.testing.assert_allclose(batch_weights, [1.0, 0.5])
         assert iterator.current == 2
 
         # Second batch
-        batch2 = next(iter_obj)
-        assert batch2 == [(2, 3), (3, 4)]
+        batch_edges, batch_weights, _idx = next(iter_obj)
+        np.testing.assert_array_equal(batch_edges, [[2, 3], [3, 4]])
+        np.testing.assert_allclose(batch_weights, [0.8, 0.3])
         assert iterator.current == 4
 
         # Should raise StopIteration
@@ -86,8 +84,9 @@ class TestEdgeBatchIterator:
 
     def test_next_partial_batch(self):
         """Test batching with partial last batch."""
-        edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)]
-        iterator = EdgeBatchIterator(edges, batch_size=2)
+        edges = np.array([[0, 1], [1, 2], [2, 3], [3, 4], [4, 5]], dtype=np.int64)
+        weights = np.array([1.0, 0.5, 0.8, 0.3, 0.1], dtype=np.float32)
+        iterator = EdgeBatchIterator(edges, weights, batch_size=2)
 
         iter_obj = iter(iterator)
 
@@ -96,8 +95,9 @@ class TestEdgeBatchIterator:
         next(iter_obj)
 
         # Partial last batch
-        batch3 = next(iter_obj)
-        assert batch3 == [(4, 5)]
+        batch_edges, batch_weights, _idx = next(iter_obj)
+        np.testing.assert_array_equal(batch_edges, [[4, 5]])
+        np.testing.assert_allclose(batch_weights, [0.1])
 
         # Should raise StopIteration
         with pytest.raises(StopIteration):
@@ -106,24 +106,28 @@ class TestEdgeBatchIterator:
     def test_len(self):
         """Test __len__ method."""
         # Test exact division
-        edges = [(0, 1), (1, 2), (2, 3), (3, 4)]
-        iterator = EdgeBatchIterator(edges, batch_size=2)
+        edges = np.zeros((4, 2), dtype=np.int64)
+        weights = np.zeros(4, dtype=np.float32)
+        iterator = EdgeBatchIterator(edges, weights, batch_size=2)
         assert len(iterator) == 2
 
         # Test with remainder
-        edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)]
-        iterator = EdgeBatchIterator(edges, batch_size=2)
+        edges = np.zeros((5, 2), dtype=np.int64)
+        weights = np.zeros(5, dtype=np.float32)
+        iterator = EdgeBatchIterator(edges, weights, batch_size=2)
         assert len(iterator) == 3
 
         # Test with batch_size larger than edges
-        edges = [(0, 1), (1, 2)]
-        iterator = EdgeBatchIterator(edges, batch_size=5)
+        edges = np.zeros((2, 2), dtype=np.int64)
+        weights = np.zeros(2, dtype=np.float32)
+        iterator = EdgeBatchIterator(edges, weights, batch_size=5)
         assert len(iterator) == 1
 
     def test_empty_edges(self):
-        """Test with empty edge list."""
-        edges = []
-        iterator = EdgeBatchIterator(edges, batch_size=2)
+        """Test with empty edge arrays."""
+        edges = np.empty((0, 2), dtype=np.int64)
+        weights = np.empty(0, dtype=np.float32)
+        iterator = EdgeBatchIterator(edges, weights, batch_size=2)
 
         assert len(iterator) == 0
 
@@ -133,34 +137,39 @@ class TestEdgeBatchIterator:
 
     def test_single_edge(self):
         """Test with single edge."""
-        edges = [(0, 1)]
-        iterator = EdgeBatchIterator(edges, batch_size=2)
+        edges = np.array([[0, 1]], dtype=np.int64)
+        weights = np.array([1.0], dtype=np.float32)
+        iterator = EdgeBatchIterator(edges, weights, batch_size=2)
 
         assert len(iterator) == 1
 
         iter_obj = iter(iterator)
-        batch = next(iter_obj)
-        assert batch == [(0, 1)]
+        batch_edges, batch_weights, _idx = next(iter_obj)
+        np.testing.assert_array_equal(batch_edges, [[0, 1]])
+        np.testing.assert_allclose(batch_weights, [1.0])
 
         with pytest.raises(StopIteration):
             next(iter_obj)
 
     def test_large_batch_size(self):
         """Test with batch size larger than number of edges."""
-        edges = [(0, 1), (1, 2)]
-        iterator = EdgeBatchIterator(edges, batch_size=10)
+        edges = np.array([[0, 1], [1, 2]], dtype=np.int64)
+        weights = np.array([1.0, 0.5], dtype=np.float32)
+        iterator = EdgeBatchIterator(edges, weights, batch_size=10)
 
         iter_obj = iter(iterator)
-        batch = next(iter_obj)
-        assert batch == edges
+        batch_edges, batch_weights, _idx = next(iter_obj)
+        np.testing.assert_array_equal(batch_edges, edges)
+        np.testing.assert_allclose(batch_weights, weights)
 
         with pytest.raises(StopIteration):
             next(iter_obj)
 
     def test_multiple_iterations(self):
         """Test that iterator can be used multiple times."""
-        edges = [(0, 1), (1, 2), (2, 3), (3, 4)]
-        iterator = EdgeBatchIterator(edges, batch_size=2)
+        edges = np.array([[0, 1], [1, 2], [2, 3], [3, 4]], dtype=np.int64)
+        weights = np.array([1.0, 0.5, 0.8, 0.3], dtype=np.float32)
+        iterator = EdgeBatchIterator(edges, weights, batch_size=2)
 
         # First iteration
         batches1 = list(iterator)
@@ -169,23 +178,28 @@ class TestEdgeBatchIterator:
         # Second iteration should work the same
         batches2 = list(iterator)
         assert len(batches2) == 2
-        assert batches1 == batches2
+        for (e1, w1, _i1), (e2, w2, _i2) in zip(batches1, batches2, strict=False):
+            np.testing.assert_array_equal(e1, e2)
+            np.testing.assert_array_equal(w1, w2)
 
-    def test_shuffle_reproducibility(self):
-        """Test that shuffle is reproducible with same random state."""
-        edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6)]
+    def test_shuffle_preserves_edge_weight_pairing(self):
+        """Test that shuffle keeps edges and weights paired correctly."""
+        edges = np.array([[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6]], dtype=np.int64)
+        weights = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6], dtype=np.float32)
 
-        # Create two iterators with same random seed
+        iterator = EdgeBatchIterator(edges, weights, batch_size=6, shuffle=True)
+
         np.random.seed(42)
-        iterator1 = EdgeBatchIterator(edges, batch_size=2, shuffle=True)
-        batches1 = list(iterator1)
+        all_batches = list(iterator)
+        batch_edges, batch_weights, _idx = all_batches[0]
 
-        np.random.seed(42)
-        iterator2 = EdgeBatchIterator(edges, batch_size=2, shuffle=True)
-        batches2 = list(iterator2)
-
-        # Results should be identical
-        assert batches1 == batches2
+        # Verify pairing: for each edge in the shuffled result,
+        # its weight should match the original pairing
+        for i in range(len(batch_edges)):
+            # Find this edge in the original array
+            mask = np.all(edges == batch_edges[i], axis=1)
+            original_idx = np.where(mask)[0][0]
+            assert batch_weights[i] == weights[original_idx]
 
 
 class TestEdgeDataset:
@@ -208,13 +222,29 @@ class TestEdgeDataset:
 
         assert hasattr(dataset, "adj_sets")
         assert hasattr(dataset, "pos_edges")
+        assert hasattr(dataset, "pos_weights")
         assert hasattr(dataset, "neg_edges")
         assert hasattr(dataset, "all_edges")
+        assert hasattr(dataset, "all_weights")
 
         assert isinstance(dataset.adj_sets, dict)
-        assert isinstance(dataset.pos_edges, list)
+        assert isinstance(dataset.pos_edges, np.ndarray)
+        assert isinstance(dataset.pos_weights, np.ndarray)
+        assert dataset.pos_edges.dtype == np.int64
+        assert dataset.pos_weights.dtype == np.float32
         assert dataset.neg_edges is None
         assert dataset.all_edges is None
+        assert dataset.all_weights is None
+
+    def test_edges_and_weights_consistent(self, simple_sparse_matrix):
+        """Test that pos_edges and pos_weights are paired correctly."""
+        dataset = EdgeDataset(simple_sparse_matrix)
+        dok = simple_sparse_matrix.todok()
+
+        for edge, weight in zip(dataset.pos_edges, dataset.pos_weights, strict=False):
+            key = (edge[0], edge[1])
+            assert key in dok
+            np.testing.assert_almost_equal(weight, dok[key])
 
     def test_adjacency_sets_creation(self, simple_sparse_matrix):
         """Test adjacency sets are correctly created."""
@@ -235,21 +265,22 @@ class TestEdgeDataset:
 
         # Convert sparse matrix to DOK format to get expected edges
         dok_matrix = simple_sparse_matrix.todok()
-        expected_edges = list(dok_matrix.keys())
+        expected_edges = set(dok_matrix.keys())
 
         # Check that positive edges match
+        actual_edges = {(int(e[0]), int(e[1])) for e in dataset.pos_edges}
         assert len(dataset.pos_edges) == len(expected_edges)
-        assert set(dataset.pos_edges) == set(expected_edges)
+        assert actual_edges == expected_edges
 
     def test_sample_negative_edges(self, simple_sparse_matrix):
         """Test negative edge sampling."""
         dataset = EdgeDataset(simple_sparse_matrix)
 
-        # Mock the parallel processing to avoid complexity
-        with patch.object(dataset, "_sample_negative_edges") as mock_sample:
-            mock_sample.return_value = [(0, 3), (0, 4), (1, 3), (1, 4)]
+        mock_result = np.array([(0, 3), (0, 4), (1, 3), (1, 4)], dtype=np.int64)
+        with patch.object(dataset, "_sample_negative_edges_chunk") as mock_sample:
+            mock_sample.return_value = mock_result
 
-            dataset.sample_negative_edges(random_state=42, n_processes=1, verbose=False)
+            dataset.sample_negative_edges(random_state=42, verbose=False)
 
             assert dataset.neg_edges is not None
             assert len(dataset.neg_edges) > 0
@@ -260,20 +291,41 @@ class TestEdgeDataset:
         dataset = EdgeDataset(simple_sparse_matrix)
 
         # Mock negative edge sampling
+        mock_neg = np.array([(0, 3), (0, 4)], dtype=np.int64)
         with (
             patch.object(dataset, "sample_negative_edges") as mock_sample,
             patch.object(dataset, "_shuffle_edges") as mock_shuffle,
         ):
             mock_sample.return_value = None
-            dataset.neg_edges = [(0, 3), (0, 4)]  # Set mock negative edges
+            dataset.neg_edges = mock_neg
 
-            dataset.sample_and_shuffle(random_state=42, n_processes=1, verbose=False)
+            dataset.sample_and_shuffle(random_state=42, verbose=False)
 
             assert dataset.all_edges is not None
+            assert dataset.all_weights is not None
             assert len(dataset.all_edges) == len(dataset.pos_edges) + len(dataset.neg_edges)
+            assert len(dataset.all_weights) == len(dataset.all_edges)
 
             mock_sample.assert_called_once()
             mock_shuffle.assert_called_once_with(random_state=42)
+
+    def test_sample_and_shuffle_negative_weights_are_zero(self, simple_sparse_matrix):
+        """Test that negative edge weights are zero after sample_and_shuffle."""
+        dataset = EdgeDataset(simple_sparse_matrix)
+
+        with patch("parametric_umap.datasets.edge_dataset.tqdm") as mock_tqdm:
+            mock_tqdm.side_effect = lambda x, *args, **kwargs: x
+
+            dataset.sample_and_shuffle(random_state=42, verbose=False)
+
+        n_pos = len(dataset.pos_edges)
+        n_neg = len(dataset.neg_edges)
+
+        # Before shuffling the order is pos then neg, but after shuffling
+        # we can check that all weights are either positive (from pos_edges) or zero (from neg_edges)
+        assert np.all(dataset.all_weights >= 0)
+        # Total should match
+        assert len(dataset.all_weights) == n_pos + n_neg
 
     def test_get_loader_with_sample_first(self, simple_sparse_matrix):
         """Test get_loader with sample_first=True."""
@@ -281,13 +333,13 @@ class TestEdgeDataset:
 
         with patch.object(dataset, "sample_and_shuffle") as mock_sample:
             mock_sample.return_value = None
-            dataset.all_edges = [(0, 1), (1, 2), (2, 3)]  # Set mock all_edges
+            dataset.all_edges = np.array([[0, 1], [1, 2], [2, 3]], dtype=np.int64)
+            dataset.all_weights = np.array([1.0, 0.5, 0.0], dtype=np.float32)
 
             loader = dataset.get_loader(
                 batch_size=2,
                 sample_first=True,
                 random_state=42,
-                n_processes=1,
                 verbose=False,
             )
 
@@ -297,7 +349,8 @@ class TestEdgeDataset:
     def test_get_loader_without_sample_first(self, simple_sparse_matrix):
         """Test get_loader with sample_first=False."""
         dataset = EdgeDataset(simple_sparse_matrix)
-        dataset.all_edges = [(0, 1), (1, 2), (2, 3)]  # Set mock all_edges
+        dataset.all_edges = np.array([[0, 1], [1, 2], [2, 3]], dtype=np.int64)
+        dataset.all_weights = np.array([1.0, 0.5, 0.0], dtype=np.float32)
 
         loader = dataset.get_loader(batch_size=2, sample_first=False)
 
@@ -314,16 +367,24 @@ class TestEdgeDataset:
     def test_shuffle_edges(self, simple_sparse_matrix):
         """Test edge shuffling functionality."""
         dataset = EdgeDataset(simple_sparse_matrix)
-        dataset.all_edges = [(0, 1), (1, 2), (2, 3), (3, 4)]
+        dataset.all_edges = np.array([[0, 1], [1, 2], [2, 3], [3, 4]], dtype=np.int64)
+        dataset.all_weights = np.array([1.0, 0.5, 0.8, 0.3], dtype=np.float32)
 
         original_edges = dataset.all_edges.copy()
+        original_weights = dataset.all_weights.copy()
 
         # Shuffle with fixed random state
         dataset._shuffle_edges(random_state=42)
 
         # Edges should be rearranged but contain same elements
-        assert set(dataset.all_edges) == set(original_edges)
+        assert set(map(tuple, dataset.all_edges.tolist())) == set(map(tuple, original_edges.tolist()))
         assert len(dataset.all_edges) == len(original_edges)
+
+        # Verify pairing is preserved
+        for i in range(len(dataset.all_edges)):
+            mask = np.all(original_edges == dataset.all_edges[i], axis=1)
+            original_idx = np.where(mask)[0][0]
+            assert dataset.all_weights[i] == original_weights[original_idx]
 
     def test_sample_negative_edges_chunk(self, simple_sparse_matrix):
         """Test negative edge sampling for a chunk of nodes."""
@@ -337,11 +398,13 @@ class TestEdgeDataset:
             random_state=42,
         )
 
-        assert isinstance(neg_edges, list)
+        assert isinstance(neg_edges, np.ndarray)
         assert len(neg_edges) > 0
+        assert neg_edges.shape[1] == 2
 
         # Check that sampled edges are actually negative (not in adjacency sets)
-        for node, target in neg_edges:
+        for row in neg_edges:
+            node, target = int(row[0]), int(row[1])
             if node in dataset.adj_sets:
                 assert target not in dataset.adj_sets[node]
 
@@ -351,11 +414,13 @@ class TestEdgeDataset:
 
         # Test with empty node list
         neg_edges = dataset._sample_negative_edges_chunk([], k=2, random_state=42)
-        assert neg_edges == []
+        assert isinstance(neg_edges, np.ndarray)
+        assert len(neg_edges) == 0
 
         # Test with k=0
         neg_edges = dataset._sample_negative_edges_chunk([0], k=0, random_state=42)
-        assert neg_edges == []
+        assert isinstance(neg_edges, np.ndarray)
+        assert len(neg_edges) == 0
 
     def test_adjacency_sets_symmetry(self):
         """Test that adjacency sets respect matrix symmetry."""
@@ -379,6 +444,8 @@ class TestEdgeDataset:
         dataset = EdgeDataset(empty_matrix)
 
         assert len(dataset.pos_edges) == 0
+        assert len(dataset.pos_weights) == 0
+        assert dataset.pos_edges.shape == (0, 2)
         assert len(dataset.adj_sets) == 5
 
         # All adjacency sets should be empty
@@ -393,6 +460,7 @@ class TestEdgeDataset:
 
         # Should have n*(n-1) positive edges
         assert len(dataset.pos_edges) == n * (n - 1)
+        assert len(dataset.pos_weights) == n * (n - 1)
 
         # Each node should be connected to all other nodes
         for i in range(n):
@@ -406,19 +474,18 @@ class TestEdgeDataset:
         with patch("parametric_umap.datasets.edge_dataset.tqdm") as mock_tqdm:
             mock_tqdm.side_effect = lambda x, *args, **kwargs: x  # Disable progress bars
 
-            neg_edges = dataset._sample_negative_edges(
+            neg_edges = dataset._sample_negative_edges_chunk(
                 [0, 1, 2],
                 k=2,
                 random_state=42,
-                n_processes=1,
-                verbose=False,
             )
 
-            assert isinstance(neg_edges, list)
+            assert isinstance(neg_edges, np.ndarray)
             assert len(neg_edges) > 0
 
             # Check that all sampled edges are indeed negative
-            for src, tgt in neg_edges:
+            for row in neg_edges:
+                src, tgt = int(row[0]), int(row[1])
                 assert tgt not in dataset.adj_sets[src]
                 assert src != tgt  # No self-loops
 
@@ -443,19 +510,23 @@ class TestEdgeDatasetIntegration:
         with patch("parametric_umap.datasets.edge_dataset.tqdm") as mock_tqdm:
             mock_tqdm.side_effect = lambda x, *args, **kwargs: x
 
-            dataset.sample_and_shuffle(random_state=42, n_processes=1, verbose=False)
+            dataset.sample_and_shuffle(random_state=42, verbose=False)
 
             assert dataset.all_edges is not None
+            assert dataset.all_weights is not None
             assert len(dataset.all_edges) > 0
 
             # Get loader and test iteration
             loader = dataset.get_loader(batch_size=10, sample_first=False)
 
             total_edges = 0
-            for batch in loader:
-                assert isinstance(batch, list)
-                assert len(batch) <= 10
-                total_edges += len(batch)
+            for batch_edges, batch_weights, _idx in loader:
+                assert isinstance(batch_edges, np.ndarray)
+                assert isinstance(batch_weights, np.ndarray)
+                assert batch_edges.shape[1] == 2
+                assert len(batch_edges) == len(batch_weights)
+                assert len(batch_edges) <= 10
+                total_edges += len(batch_edges)
 
             assert total_edges == len(dataset.all_edges)
 
@@ -472,7 +543,7 @@ class TestEdgeDatasetIntegration:
         with patch("parametric_umap.datasets.edge_dataset.tqdm") as mock_tqdm:
             mock_tqdm.side_effect = lambda x, *args, **kwargs: x
 
-            dataset.sample_and_shuffle(random_state=42, n_processes=1, verbose=False)
+            dataset.sample_and_shuffle(random_state=42, verbose=False)
 
             # Check that we have both positive and negative edges
             assert len(dataset.pos_edges) > 0
@@ -481,6 +552,7 @@ class TestEdgeDatasetIntegration:
             # All edges should be the combination of positive and negative
             expected_total = len(dataset.pos_edges) + len(dataset.neg_edges)
             assert len(dataset.all_edges) == expected_total
+            assert len(dataset.all_weights) == expected_total
 
     def test_reproducibility(self):
         """Test that results are reproducible with same random state."""
@@ -495,11 +567,12 @@ class TestEdgeDatasetIntegration:
         with patch("parametric_umap.datasets.edge_dataset.tqdm") as mock_tqdm:
             mock_tqdm.side_effect = lambda x, *args, **kwargs: x
 
-            dataset1.sample_and_shuffle(random_state=42, n_processes=1, verbose=False)
-            dataset2.sample_and_shuffle(random_state=42, n_processes=1, verbose=False)
+            dataset1.sample_and_shuffle(random_state=42, verbose=False)
+            dataset2.sample_and_shuffle(random_state=42, verbose=False)
 
             # Results should be identical
-            assert dataset1.all_edges == dataset2.all_edges
+            np.testing.assert_array_equal(dataset1.all_edges, dataset2.all_edges)
+            np.testing.assert_array_equal(dataset1.all_weights, dataset2.all_weights)
 
     def test_large_dataset_performance(self):
         """Test performance with larger dataset."""
@@ -516,14 +589,17 @@ class TestEdgeDatasetIntegration:
         # Test that initialization completes
         assert len(dataset.adj_sets) == n
         assert len(dataset.pos_edges) > 0
+        assert len(dataset.pos_weights) > 0
 
         # Test that we can create a loader without sampling (quick test)
-        dataset.all_edges = dataset.pos_edges  # Skip negative sampling for speed
+        dataset.all_edges = dataset.pos_edges
+        dataset.all_weights = dataset.pos_weights
         loader = dataset.get_loader(batch_size=50, sample_first=False)
 
         # Test first batch
-        first_batch = next(iter(loader))
-        assert len(first_batch) <= 50
+        batch_edges, batch_weights, _idx = next(iter(loader))
+        assert len(batch_edges) <= 50
+        assert len(batch_weights) <= 50
 
     def test_loader_integration_with_iterator(self):
         """Test integration between EdgeDataset and EdgeBatchIterator."""
@@ -532,7 +608,8 @@ class TestEdgeDatasetIntegration:
         matrix.eliminate_zeros()
 
         dataset = EdgeDataset(matrix)
-        dataset.all_edges = dataset.pos_edges  # Skip negative sampling
+        dataset.all_edges = dataset.pos_edges
+        dataset.all_weights = dataset.pos_weights
 
         # Create loader with specific batch size
         batch_size = 5
@@ -540,11 +617,12 @@ class TestEdgeDatasetIntegration:
 
         # Test that loader properties match
         assert loader.batch_size == batch_size
-        assert loader.edges == dataset.all_edges
+        np.testing.assert_array_equal(loader.edges, dataset.all_edges)
+        np.testing.assert_array_equal(loader.weights, dataset.all_weights)
 
         # Test iteration
         batches = list(loader)
-        total_edges = sum(len(batch) for batch in batches)
+        total_edges = sum(len(e) for e, w, _i in batches)
         assert total_edges == len(dataset.all_edges)
 
 
@@ -558,13 +636,16 @@ class TestEdgeDatasetErrorHandling:
         batch_size=0 causes ZeroDivisionError when calling __len__.
         batch_size=-1 creates successfully but produces an infinite iterator.
         """
+        edges = np.array([[0, 1]], dtype=np.int64)
+        weights = np.array([1.0], dtype=np.float32)
+
         # batch_size=0: creation succeeds but __len__ raises ZeroDivisionError
-        iterator = EdgeBatchIterator([(0, 1)], batch_size=0)
+        iterator = EdgeBatchIterator(edges, weights, batch_size=0)
         with pytest.raises(ZeroDivisionError):
             len(iterator)
 
         # batch_size=-1: creation succeeds (no validation)
-        iterator = EdgeBatchIterator([(0, 1)], batch_size=-1)
+        iterator = EdgeBatchIterator(edges, weights, batch_size=-1)
         assert iterator.batch_size == -1
 
     def test_edge_dataset_invalid_matrix(self):
@@ -607,28 +688,11 @@ class TestEdgeDatasetErrorHandling:
 
     def test_iterator_state_errors(self):
         """Test iterator state error handling."""
-        edges = [(0, 1), (1, 2)]
-        iterator = EdgeBatchIterator(edges, batch_size=1)
+        edges = np.array([[0, 1], [1, 2]], dtype=np.int64)
+        weights = np.array([1.0, 0.5], dtype=np.float32)
+        iterator = EdgeBatchIterator(edges, weights, batch_size=1)
 
-        # Test accessing next without iter
+        # Test accessing next when current >= len(edges)
         with pytest.raises(StopIteration):
-            # Should raise StopIteration when current >= len(edges)
             iterator.current = 10
             next(iterator)
-
-    def test_multiprocessing_errors(self):
-        """Test multiprocessing error handling."""
-        matrix = sparse.csr_matrix(([1], ([0], [1])), shape=(2, 2))
-        dataset = EdgeDataset(matrix)
-
-        # Test with invalid n_processes
-        with patch("parametric_umap.datasets.edge_dataset.os.cpu_count", return_value=4):
-            # Should handle n_processes gracefully
-            result = dataset._sample_negative_edges(
-                [0],
-                k=1,
-                random_state=42,
-                n_processes=100,
-                verbose=False,
-            )
-            assert isinstance(result, list)

@@ -45,12 +45,22 @@ def compute_sigma_i(
     index.add(X)
     distances_sq, neighbors = index.search(X, k + 1)  # Include self as the 0th neighbor
 
-    # Remove self distances and neighbors
-    distances_sq = distances_sq[:, 1:].astype(np.float32)  # Shape: (n_samples, k)
-    neighbors = neighbors[:, 1:]
+    # Remove self-matches by index, not position (handles exact duplicates correctly)
+    self_indices = np.arange(n_samples)[:, np.newaxis]
+    is_self = neighbors == self_indices
+    # If self not found among results (shouldn't happen), fall back to removing position 0
+    no_self = ~is_self.any(axis=1)
+    is_self[no_self, 0] = True
+    # For rows with multiple self-matches (impossible with unique indices), keep only the first
+    first_self = is_self.argmax(axis=1)
+    is_self[:] = False
+    is_self[np.arange(n_samples), first_self] = True
+    keep = ~is_self
+    distances_sq = distances_sq[keep].reshape(n_samples, k).astype(np.float32)
+    neighbors = neighbors[keep].reshape(n_samples, k)
 
     # Convert squared distances to Euclidean distances
-    distances = np.sqrt(distances_sq).astype(np.float32)
+    distances = np.sqrt(np.maximum(distances_sq, 0)).astype(np.float32)
 
     # Step 2: Initialize rho and sigma arrays
     rho = distances[:, 0].copy()  # Distance to the nearest neighbor, Shape: (n_samples,)
@@ -59,8 +69,17 @@ def compute_sigma_i(
     # Step 3: Vectorized Binary Search to find sigma_i
     # Initialize low and high bounds for all samples
     low = np.full(n_samples, 1e-5, dtype=np.float32)
-    high = np.full(n_samples, 10.0, dtype=np.float32)
+    high = np.full(n_samples, 1.0, dtype=np.float32)
     sigma = np.zeros(n_samples, dtype=np.float32)
+
+    # Bracket-finding: double high until it brackets the solution for all samples
+    for _ in range(max_iter):
+        exponent = -np.maximum(distances - rho[:, np.newaxis], 0) / high[:, np.newaxis]
+        prob_sum = np.exp(exponent).sum(axis=1)
+        needs_increase = prob_sum < target
+        if not needs_increase.any():
+            break
+        high[needs_increase] *= 2.0
 
     # Initialize mask to track convergence
     converged = np.zeros(n_samples, dtype=bool)

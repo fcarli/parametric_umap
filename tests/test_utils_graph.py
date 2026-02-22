@@ -79,6 +79,10 @@ class TestComputeSigmaI:
         assert np.all(np.isfinite(sigma))
         assert np.all(sigma > 0)
 
+        # Self-indices must never appear in neighbor lists (even with exact duplicates)
+        for i in range(len(X)):
+            assert i not in neighbors[i], f"Point {i} listed as its own neighbor"
+
     def test_convergence_parameters(self, sample_2d_data):
         """Test different convergence parameters."""
         k = 5

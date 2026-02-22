@@ -110,7 +110,7 @@ class VariableDataset:
 
     def __init__(self, X: np.ndarray, indexes: list[int] | None = None) -> None:
         """Initialize the variable dataset from a numpy array."""
-        self.X = torch.tensor(X, dtype=torch.float32)
+        self.X = torch.as_tensor(X, dtype=torch.float32)
         self.indexes_map: dict[int, int] | None = None
 
         if indexes is not None:
