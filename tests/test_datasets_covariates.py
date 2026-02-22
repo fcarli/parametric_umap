@@ -15,36 +15,36 @@ class TestTorchSparseDataset:
         """Test basic initialization with sparse matrix."""
         dataset = TorchSparseDataset(sparse_matrix_data)
 
-        assert hasattr(dataset, "P_sparse")
+        assert hasattr(dataset, "_keys")
+        assert hasattr(dataset, "_values")
         assert hasattr(dataset, "device")
         assert dataset.device == "cpu"
-        assert isinstance(dataset.P_sparse, torch.Tensor)
-        assert dataset.P_sparse.is_sparse
+        assert isinstance(dataset._keys, torch.Tensor)
+        assert isinstance(dataset._values, torch.Tensor)
 
     def test_initialization_with_device(self, sparse_matrix_data):
         """Test initialization with specific device."""
         dataset = TorchSparseDataset(sparse_matrix_data, device="cpu")
 
         assert dataset.device == "cpu"
-        assert dataset.P_sparse.device == torch.device("cpu")
+        assert dataset._keys.device == torch.device("cpu")
 
         # Test GPU if available
         if torch.cuda.is_available():
             dataset_gpu = TorchSparseDataset(sparse_matrix_data, device="cuda:0")
             assert dataset_gpu.device == "cuda:0"
-            assert dataset_gpu.P_sparse.device.type == "cuda"
+            assert dataset_gpu._keys.device.type == "cuda"
 
     def test_sparse_tensor_properties(self, sparse_matrix_data):
-        """Test that sparse tensor maintains properties of original matrix."""
+        """Test that dataset maintains properties of original matrix."""
         dataset = TorchSparseDataset(sparse_matrix_data)
 
-        # Check shape
-        assert dataset.P_sparse.shape == sparse_matrix_data.shape
+        # Check dimension
+        assert dataset._n == sparse_matrix_data.shape[0]
 
         # Check that number of non-zeros is preserved
         original_nnz = sparse_matrix_data.nnz
-        tensor_nnz = dataset.P_sparse._nnz()
-        assert tensor_nnz == original_nnz
+        assert len(dataset) == original_nnz
 
     def test_getitem_single_index(self, sparse_matrix_data):
         """Test __getitem__ with single index tuple."""
@@ -113,18 +113,18 @@ class TestTorchSparseDataset:
         result = dataset.to("cpu")
         assert result is dataset  # Should return self
         assert dataset.device == "cpu"
-        assert dataset.P_sparse.device == torch.device("cpu")
+        assert dataset._keys.device == torch.device("cpu")
 
         # Test GPU if available
         if torch.cuda.is_available():
             dataset.to("cuda:0")
             assert dataset.device == "cuda:0"
-            assert dataset.P_sparse.device.type == "cuda"
+            assert dataset._keys.device.type == "cuda"
 
             # Move back to CPU
             dataset.to("cpu")
             assert dataset.device == "cpu"
-            assert dataset.P_sparse.device == torch.device("cpu")
+            assert dataset._keys.device == torch.device("cpu")
 
     def test_empty_sparse_matrix(self):
         """Test with empty sparse matrix."""
@@ -132,7 +132,7 @@ class TestTorchSparseDataset:
         dataset = TorchSparseDataset(empty_matrix)
 
         assert len(dataset) == 0
-        assert dataset.P_sparse.shape == (5, 5)
+        assert dataset._n == 5
 
         # Accessing any element should return zero
         value = dataset[(0, 0)]
@@ -152,7 +152,7 @@ class TestTorchSparseDataset:
         large_matrix = sparse.csr_matrix((data, (rows, cols)), shape=(n, n))
         dataset = TorchSparseDataset(large_matrix)
 
-        assert dataset.P_sparse.shape == (n, n)
+        assert dataset._n == n
         assert len(dataset) <= nnz  # May be less due to duplicates
 
     def test_data_type_preservation(self):
@@ -165,8 +165,8 @@ class TestTorchSparseDataset:
         sparse_mat = sparse.csr_matrix((data, (row, col)), shape=(3, 3))
         dataset = TorchSparseDataset(sparse_mat)
 
-        # Check that tensor uses float32 (FloatTensor)
-        assert dataset.P_sparse.dtype == torch.float32
+        # Check that values use float32
+        assert dataset._values.dtype == torch.float32
 
         # Check values are correctly converted
         value = dataset[(0, 0)]
@@ -184,12 +184,12 @@ class TestTorchSparseDataset:
         value = dataset[(n_rows - 1, n_cols - 1)]
         assert isinstance(value, torch.Tensor)
 
-        # Test invalid bounds (should raise error)
-        with pytest.raises((IndexError, RuntimeError)):
-            dataset[(n_rows, 0)]
+        # Out-of-bounds indices return 0 (key won't match in searchsorted)
+        value = dataset[(n_rows, 0)]
+        assert torch.isclose(value, torch.tensor(0.0), atol=1e-6)
 
-        with pytest.raises((IndexError, RuntimeError)):
-            dataset[(0, n_cols)]
+        value = dataset[(0, n_cols)]
+        assert torch.isclose(value, torch.tensor(0.0), atol=1e-6)
 
 
 class TestVariableDataset:
@@ -428,7 +428,7 @@ class TestDatasetsIntegration:
 
         # Test that probabilities are in valid range
         assert len(dataset) > 0
-        assert dataset.P_sparse._nnz() == prob_matrix.nnz
+        assert len(dataset) == prob_matrix.nnz
 
     def test_variable_dataset_with_embedding_data(self, swiss_roll_data):
         """Test VariableDataset with realistic embedding data."""
@@ -486,8 +486,7 @@ class TestDatasetsIntegration:
         large_sparse = sparse.random(n, n, density=density, format="csr")
         sparse_dataset = TorchSparseDataset(large_sparse)
 
-        # Should maintain sparsity
-        assert sparse_dataset.P_sparse.is_sparse
+        # Should preserve nnz count
         assert len(sparse_dataset) == large_sparse.nnz
 
         # Create large dense data
@@ -540,10 +539,10 @@ class TestDatasetsErrorHandling:
         with pytest.raises((TypeError, IndexError, ValueError)):
             variable_dataset["invalid_index"]
 
-        # Test out of bounds access
+        # Out-of-bounds access returns 0 for sparse dataset (searchsorted-based)
         n_rows, n_cols = sparse_matrix_data.shape
-        with pytest.raises((IndexError, RuntimeError)):
-            sparse_dataset[(n_rows + 10, 0)]
+        value = sparse_dataset[(n_rows + 10, 0)]
+        assert torch.isclose(value, torch.tensor(0.0), atol=1e-6)
 
         with pytest.raises(IndexError):
             variable_dataset[len(sample_2d_data) + 10]

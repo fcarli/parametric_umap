@@ -61,9 +61,12 @@ class TorchSparseDataset:
             cols_t = torch.tensor(cols, dtype=torch.long, device=self.device)
             query = rows_t * self._n + cols_t
 
-        pos = torch.searchsorted(self._keys, query).clamp(max=self._nnz - 1)
-        found = self._keys[pos] == query
-        result = torch.where(found, self._values[pos], torch.zeros_like(self._values[pos]))
+        if self._nnz == 0:
+            result = torch.zeros(query.shape, dtype=torch.float32, device=self.device)
+        else:
+            pos = torch.searchsorted(self._keys, query).clamp(max=self._nnz - 1)
+            found = self._keys[pos] == query
+            result = torch.where(found, self._values[pos], torch.zeros_like(self._values[pos]))
 
         if isinstance(idx, tuple) and isinstance(idx[0], int):
             return result.squeeze()
