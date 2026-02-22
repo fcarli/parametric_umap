@@ -696,4 +696,3 @@ class TestEdgeDatasetErrorHandling:
         with pytest.raises(StopIteration):
             iterator.current = 10
             next(iterator)
-

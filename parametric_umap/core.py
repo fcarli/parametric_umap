@@ -213,9 +213,7 @@ class ParametricUMAP:
         # Pre-place edge weights and input-space distances on the compute
         # device (or CPU in low_memory mode) so batch slicing is fast.
         _tensor_device = "cpu" if low_memory else self.device
-        all_weights_t, all_x_dists_t = self._precompute_edge_tensors(
-            X, ed.all_edges, ed.all_weights, _tensor_device
-        )
+        all_weights_t, all_x_dists_t = self._precompute_edge_tensors(X, ed.all_edges, ed.all_weights, _tensor_device)
 
         if verbose:
             print("Training...")
