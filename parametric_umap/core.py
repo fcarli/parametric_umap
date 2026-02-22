@@ -321,7 +321,7 @@ class ParametricUMAP:
             raise ValueError(msg)
 
         self.model.eval()
-        X = torch.tensor(X, dtype=torch.float32).to(self.device)
+        X = torch.as_tensor(X, dtype=torch.float32).to(self.device)
 
         with torch.no_grad():
             X_reduced = self.model(X)
