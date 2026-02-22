@@ -50,7 +50,7 @@ def compute_sigma_i(
     neighbors = neighbors[:, 1:]
 
     # Convert squared distances to Euclidean distances
-    distances = np.sqrt(distances_sq).astype(np.float32)
+    distances = np.sqrt(np.maximum(distances_sq, 0)).astype(np.float32)
 
     # Step 2: Initialize rho and sigma arrays
     rho = distances[:, 0].copy()  # Distance to the nearest neighbor, Shape: (n_samples,)

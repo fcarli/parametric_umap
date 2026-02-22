@@ -197,13 +197,13 @@ class ParametricUMAP:
         if verbose:
             print("Training...")
 
-        pbar = tqdm(range(self.n_epochs), desc="Epochs", position=0)
+        pbar = tqdm(range(self.n_epochs), desc="Epochs", position=0, disable=not verbose)
         for epoch in pbar:
             epoch_loss = 0
             num_batches = 0
 
-            for edge_batch in tqdm(loader, desc=f"Epoch {epoch + 1}", position=1, leave=False):
-                optimizer.zero_grad()
+            for edge_batch in tqdm(loader, desc=f"Epoch {epoch + 1}", position=1, leave=False, disable=not verbose):
+                optimizer.zero_grad(set_to_none=True)
 
                 # Get src and dst indexes from edge_batch
                 src_indexes = [i for i, j in edge_batch]
@@ -229,7 +229,8 @@ class ParametricUMAP:
                 X_distances = torch.norm(src_values - dst_values, dim=1)
 
                 # Compute losses
-                qs = torch.pow(1 + self.a * torch.norm(src_embeddings - dst_embeddings, dim=1, p=2 * self.b), -1)
+                qs = torch.pow(1 + self.a * torch.pow(Z_distances, 2 * self.b), -1)
+                qs = qs.clamp(1e-7, 1 - 1e-7)
                 umap_loss = self.loss_fn(qs, targets)
                 corr_loss = compute_correlation_loss(X_distances, Z_distances)
                 loss = umap_loss + self.correlation_weight * corr_loss
