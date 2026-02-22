@@ -129,6 +129,16 @@ class ParametricUMAP:
             use_dropout=self.use_dropout,
         ).to(self.device)
 
+    @staticmethod
+    def _precompute_edge_tensors(
+        X: np.ndarray, edges: np.ndarray, weights: np.ndarray, device: str
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Build device-placed tensors for edge weights and input-space distances."""
+        weights_t = torch.tensor(weights, dtype=torch.float32, device=device)
+        x_dists = np.linalg.norm(X[edges[:, 0]] - X[edges[:, 1]], axis=1).astype(np.float32)
+        x_dists_t = torch.tensor(x_dists, dtype=torch.float32, device=device)
+        return weights_t, x_dists_t
+
     def fit(
         self,
         X: np.ndarray | torch.Tensor,
@@ -189,19 +199,19 @@ class ParametricUMAP:
             verbose=verbose,
         )
 
-        # Pre-convert edge weights to a tensor.  In normal mode they live
-        # on the compute device so batch slicing is device-local.  In
-        # low_memory mode they stay on CPU and are transferred per batch.
-        _weights_device = "cpu" if low_memory else self.device
-        all_weights_t = torch.tensor(ed.all_weights, dtype=torch.float32, device=_weights_device)
+        # Pre-place edge weights and input-space distances on the compute
+        # device (or CPU in low_memory mode) so batch slicing is fast.
+        _tensor_device = "cpu" if low_memory else self.device
+        all_weights_t, all_x_dists_t = self._precompute_edge_tensors(
+            X, ed.all_edges, ed.all_weights, _tensor_device
+        )
 
         if verbose:
             print("Training...")
 
         pbar = tqdm(range(self.n_epochs), desc="Epochs", position=0, disable=not verbose)
         for epoch in pbar:
-            epoch_loss = 0
-            num_batches = 0
+            epoch_loss, num_batches = 0.0, 0
 
             for edge_batch, _weight_batch, batch_idx in tqdm(
                 loader, desc=f"Epoch {epoch + 1}", position=1, leave=False, disable=not verbose
@@ -212,24 +222,26 @@ class ParametricUMAP:
                 src_indexes = edge_batch[:, 0]
                 dst_indexes = edge_batch[:, 1]
 
-                # Get values from dataset; weights are sliced from pre-placed tensor
+                # Get values from dataset; weights and X distances are sliced
+                # from pre-placed tensors
                 src_values = dataset[src_indexes]
                 dst_values = dataset[dst_indexes]
                 targets = all_weights_t[batch_idx]
+                X_distances = all_x_dists_t[batch_idx]
 
                 # In low_memory mode, move batch tensors to the compute device
                 if low_memory:
                     src_values = src_values.to(self.device)
                     dst_values = dst_values.to(self.device)
                     targets = targets.to(self.device)
+                    X_distances = X_distances.to(self.device)
 
                 # Get embeddings from model
                 src_embeddings = self.model(src_values)
                 dst_embeddings = self.model(dst_values)
 
-                # Compute distances (L^(2b) norm for embedding space, L2 for input space)
+                # Compute embedding-space distances (L^(2b) norm)
                 Z_distances = torch.norm(src_embeddings - dst_embeddings, dim=1, p=2 * self.b)
-                X_distances = torch.norm(src_values - dst_values, dim=1)
 
                 # Compute losses
                 qs = torch.pow(1 + self.a * Z_distances, -1)
@@ -246,7 +258,9 @@ class ParametricUMAP:
 
             if resample_negatives:
                 loader = ed.get_loader(batch_size=self.batch_size, sample_first=True)
-                all_weights_t = torch.tensor(ed.all_weights, dtype=torch.float32, device=_weights_device)
+                all_weights_t, all_x_dists_t = self._precompute_edge_tensors(
+                    X, ed.all_edges, ed.all_weights, _tensor_device
+                )
 
             avg_loss = epoch_loss / num_batches
             losses.append(avg_loss)
