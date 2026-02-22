@@ -59,8 +59,17 @@ def compute_sigma_i(
     # Step 3: Vectorized Binary Search to find sigma_i
     # Initialize low and high bounds for all samples
     low = np.full(n_samples, 1e-5, dtype=np.float32)
-    high = np.full(n_samples, 10.0, dtype=np.float32)
+    high = np.full(n_samples, 1.0, dtype=np.float32)
     sigma = np.zeros(n_samples, dtype=np.float32)
+
+    # Bracket-finding: double high until it brackets the solution for all samples
+    for _ in range(max_iter):
+        exponent = -np.maximum(distances - rho[:, np.newaxis], 0) / high[:, np.newaxis]
+        prob_sum = np.exp(exponent).sum(axis=1)
+        needs_increase = prob_sum < target
+        if not needs_increase.any():
+            break
+        high[needs_increase] *= 2.0
 
     # Initialize mask to track convergence
     converged = np.zeros(n_samples, dtype=bool)
