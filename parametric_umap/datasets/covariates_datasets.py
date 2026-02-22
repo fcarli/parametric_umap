@@ -11,7 +11,7 @@ class TorchSparseDataset:
     Stores sparse COO data as sorted linear indices and values on the
     target device.  Look-ups use ``torch.searchsorted`` so everything
     stays on-device (CPU, CUDA, or MPS) with O(nnz) memory and
-    O(batch × log nnz) query time.
+    O(batch * log nnz) query time.
 
     Parameters
     ----------
