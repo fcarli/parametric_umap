@@ -272,7 +272,11 @@ class ParametricUMAP:
                 num_batches += 1
 
             if resample_negatives:
-                loader = ed.get_loader(batch_size=self.batch_size, sample_first=True)
+                loader = ed.get_loader(
+                    batch_size=self.batch_size,
+                    sample_first=True,
+                    random_state=random_state + epoch + 1,
+                )
                 all_weights_t, all_x_dists_t = self._precompute_edge_tensors(
                     X, ed.all_edges, ed.all_weights, _tensor_device
                 )
