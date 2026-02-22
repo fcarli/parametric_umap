@@ -1,5 +1,11 @@
 """Shared pytest fixtures and configuration for parametric_umap tests."""
 
+import os
+
+# Prevent dual-OpenMP conflicts between FAISS and PyTorch (same fix as CI)
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
