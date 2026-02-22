@@ -9,16 +9,35 @@ A PyTorch implementation of Parametric UMAP (Uniform Manifold Approximation and 
 
 ## Install
 
-A proper installation of [PyTorch](https://pytorch.org) (possibly with GPU acceleration) is suggested before installing this package. The package can then be installed with
-
 ```bash
-pip install parametric_umap
+pip install parametric-umap
 ```
 
-To instead install the latest version of this repository use
+Or install the latest version from the repository:
 ```bash
 pip install git+https://github.com/fcarli/parametric_umap.git
 ```
+
+### GPU acceleration
+
+The pip install pulls the default PyTorch build from PyPI. If you need a specific CUDA version, install PyTorch first following the [official instructions](https://pytorch.org/get-started/locally/), then install this package.
+
+For developers using [uv](https://docs.astral.sh/uv/), CUDA version selection is built in via extras:
+
+```bash
+# macOS / Windows (CPU automatic, no extra needed)
+uv sync --extra dev --extra test --extra examples
+
+# Linux — pick your CUDA version
+uv sync --extra dev --extra test --extra examples --extra cu126
+
+# Linux — CPU only
+uv sync --extra dev --extra test --extra examples --extra cpu
+```
+
+Available CUDA extras: `cu118`, `cu121`, `cu124`, `cu126`, `cu128`.
+
+Apple Silicon Macs can use the PyTorch MPS backend by passing `device='mps'`.
 
 ## Overview
 
@@ -94,15 +113,10 @@ Hyperparameters default values follow the [original UMAP implementation](https:/
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
 ```bash
-# Install all dependencies
-make install
-
-# Run tests
-make test
-
-# Lint and format
-make lint
-make format
+make install    # Install all dependencies (CPU torch)
+make test       # Run tests
+make lint       # Lint checks
+make format     # Format code
 ```
 
 ## Citation
