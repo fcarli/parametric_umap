@@ -39,4 +39,4 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: uv sync --extra test --extra dev --extra examples --extra cpu
-      - run: uv run pytest
+      - run: uv run --no-sync pytest
