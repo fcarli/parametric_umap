@@ -6,7 +6,7 @@ from torch import nn
 from torch.optim import AdamW
 from tqdm.auto import tqdm
 
-from parametric_umap.datasets.covariates_datasets import TorchSparseDataset, VariableDataset
+from parametric_umap.datasets.covariates_datasets import VariableDataset
 from parametric_umap.datasets.edge_dataset import EdgeDataset
 from parametric_umap.models.mlp import MLP
 from parametric_umap.utils.graph import compute_all_p_umap
@@ -149,7 +149,8 @@ class ParametricUMAP:
         n_processes : int, optional (default=6)
             Number of processes to use for parallel computation.
         low_memory : bool, optional (default=False)
-            If True, keeps the dataset on CPU to save GPU memory.
+            If True, keeps the data and edge weights on CPU and transfers
+            per batch.  Trades speed for lower accelerator memory usage.
         random_state : int, optional (default=0)
             Random state for reproducibility.
         verbose : bool, optional (default=True)
@@ -167,17 +168,11 @@ class ParametricUMAP:
         if self.model is None:
             self._init_model(X.shape[1])
 
-        # Create datasets
-        dataset = VariableDataset(X).to(self.device)
+        # Create datasets.  In low_memory mode, keep data on CPU and
+        # transfer each batch to the compute device during training.
+        dataset = VariableDataset(X) if low_memory else VariableDataset(X).to(self.device)
         P_sym = compute_all_p_umap(X, k=self.n_neighbors)
         ed = EdgeDataset(P_sym)
-
-        # TorchSparseDataset uses a plain dict internally, so it is always
-        # lightweight and device-independent.  In low_memory mode we keep the
-        # returned tensors on CPU and transfer per batch; otherwise they are
-        # created directly on the compute device.
-        _sparse_on_cpu = low_memory
-        target_dataset = TorchSparseDataset(P_sym) if _sparse_on_cpu else TorchSparseDataset(P_sym).to(self.device)
 
         # Initialize optimizer
         optimizer = AdamW(self.model.parameters(), lr=self.learning_rate)
@@ -194,6 +189,12 @@ class ParametricUMAP:
             verbose=verbose,
         )
 
+        # Pre-convert edge weights to a tensor.  In normal mode they live
+        # on the compute device so batch slicing is device-local.  In
+        # low_memory mode they stay on CPU and are transferred per batch.
+        _weights_device = "cpu" if low_memory else self.device
+        all_weights_t = torch.tensor(ed.all_weights, dtype=torch.float32, device=_weights_device)
+
         if verbose:
             print("Training...")
 
@@ -202,20 +203,22 @@ class ParametricUMAP:
             epoch_loss = 0
             num_batches = 0
 
-            for edge_batch in tqdm(loader, desc=f"Epoch {epoch + 1}", position=1, leave=False, disable=not verbose):
+            for edge_batch, _weight_batch, batch_idx in tqdm(
+                loader, desc=f"Epoch {epoch + 1}", position=1, leave=False, disable=not verbose
+            ):
                 optimizer.zero_grad(set_to_none=True)
 
-                # Get src and dst indexes from edge_batch
-                src_indexes = [i for i, j in edge_batch]
-                dst_indexes = [j for i, j in edge_batch]
+                # Get src and dst indexes from edge_batch (numpy array slicing)
+                src_indexes = edge_batch[:, 0]
+                dst_indexes = edge_batch[:, 1]
 
-                # Get values from dataset
+                # Get values from dataset; weights are sliced from pre-placed tensor
                 src_values = dataset[src_indexes]
                 dst_values = dataset[dst_indexes]
-                targets = target_dataset[edge_batch]
+                targets = all_weights_t[batch_idx]
 
-                # If sparse data lives on CPU, move batch tensors to the compute device
-                if _sparse_on_cpu:
+                # In low_memory mode, move batch tensors to the compute device
+                if low_memory:
                     src_values = src_values.to(self.device)
                     dst_values = dst_values.to(self.device)
                     targets = targets.to(self.device)
@@ -243,6 +246,7 @@ class ParametricUMAP:
 
             if resample_negatives:
                 loader = ed.get_loader(batch_size=self.batch_size, sample_first=True)
+                all_weights_t = torch.tensor(ed.all_weights, dtype=torch.float32, device=_weights_device)
 
             avg_loss = epoch_loss / num_batches
             losses.append(avg_loss)
@@ -301,7 +305,8 @@ class ParametricUMAP:
         verbose : bool, optional (default=True)
             Whether to display progress bars and print statements.
         low_memory : bool, optional (default=False)
-            If True, keeps the dataset on CPU to save GPU memory.
+            If True, keeps the data and edge weights on CPU and transfers
+            per batch.  Trades speed for lower accelerator memory usage.
 
         Returns
         -------
