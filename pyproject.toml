@@ -1,6 +1,6 @@
 [project]
 name = "parametric-umap"
-version = "0.1.1"
+version = "0.2.0"
 description = "A streamlined and fast implementation of parametric UMAP using PyTorch and FAISS"
 authors = [
     {name = "Francesco Carli",email = "francesco.carli94@gmail.com"}
