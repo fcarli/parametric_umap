@@ -346,7 +346,7 @@ class ParametricUMAP:
             The loaded model instance.
 
         """
-        save_dict = torch.load(path, map_location=device)
+        save_dict = torch.load(path, map_location=device, weights_only=True)
 
         # Create instance with saved parameters
         instance = cls(
