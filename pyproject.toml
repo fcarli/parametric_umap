@@ -21,11 +21,11 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "numpy (>=2.2.3,<3.0.0)",
-    "scipy (>=1.15.2,<2.0.0)",
-    "tqdm (>=4.67.1,<5.0.0)",
-    "faiss-cpu (>=1.10.0,<2.0.0)",
-    "torch (>=2.3.1,<3.0.0)",
+    "numpy>=2.2.3",
+    "scipy>=1.15.2",
+    "tqdm>=4.67.1",
+    "faiss-cpu>=1.10.0",
+    "torch>=2.3.1",
 ]
 
 [project.urls]
@@ -92,12 +92,12 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.optional-dependencies]
-cpu = ["torch (>=2.3.1,<3.0.0)"]
-cu118 = ["torch (>=2.3.1,<3.0.0)"]
-cu121 = ["torch (>=2.3.1,<3.0.0)"]
-cu124 = ["torch (>=2.3.1,<3.0.0)"]
-cu126 = ["torch (>=2.3.1,<3.0.0)"]
-cu128 = ["torch (>=2.3.1,<3.0.0)"]
+cpu = ["torch>=2.3.1"]
+cu118 = ["torch>=2.3.1"]
+cu121 = ["torch>=2.3.1"]
+cu124 = ["torch>=2.3.1"]
+cu126 = ["torch>=2.3.1"]
+cu128 = ["torch>=2.3.1"]
 dev = [
     "ruff>=0.9.9",
     "pre-commit>=4.0.0",
@@ -166,17 +166,12 @@ max-doc-length = 90
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
 addopts = [
     "--strict-markers",
     "--strict-config",
     "--verbose",
     "--cov=parametric_umap",
     "--cov-report=term-missing",
-    "--cov-report=html",
-    "--cov-report=xml",
     "--cov-fail-under=30",
 ]
 markers = [
@@ -184,35 +179,3 @@ markers = [
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
 ]
-filterwarnings = [
-    "ignore::UserWarning",
-    "ignore::DeprecationWarning",
-]
-
-[tool.semantic_release]
-version_toml = ["pyproject.toml:project.version"]
-upload_to_pypi = true
-upload_to_release = true
-build_command = "uv build"
-dist_path = "dist/"
-remove_dist = false
-tag_format = "v{version}"
-
-[tool.semantic_release.branches.main]
-match = "main"
-prerelease = false
-
-[tool.semantic_release.commit_parser_options]
-allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "style", "refactor", "test"]
-minor_tags = ["feat"]
-patch_tags = ["fix", "perf"]
-
-[tool.semantic_release.remote]
-type = "github"
-
-[tool.semantic_release.remote.token]
-env = "GH_TOKEN"
-
-[tool.semantic_release.publish]
-dist_glob_patterns = ["dist/*"]
-upload_to_vcs_release = true
