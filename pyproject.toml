@@ -8,6 +8,18 @@ authors = [
 license = {text = "BSD License"}
 readme = "README.md"
 requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
 dependencies = [
     "numpy (>=2.2.3,<3.0.0)",
     "scipy (>=1.15.2,<2.0.0)",
@@ -15,6 +27,12 @@ dependencies = [
     "faiss-cpu (>=1.10.0,<2.0.0)",
     "torch (>=2.6.0,<3.0.0)",
 ]
+
+[project.urls]
+Homepage = "https://github.com/fcarli/parametric_umap"
+Repository = "https://github.com/fcarli/parametric_umap"
+Issues = "https://github.com/fcarli/parametric_umap/issues"
+Changelog = "https://github.com/fcarli/parametric_umap/blob/main/CHANGELOG.md"
 
 [tool.uv.sources]
 torch = [
@@ -43,6 +61,7 @@ build-backend = "hatchling.build"
 [project.optional-dependencies]
 dev = [
     "ruff>=0.9.9",
+    "pre-commit>=4.0.0",
     "ipykernel>=6.29.5",
     "jupyter>=1.1.1",
 ]
@@ -57,10 +76,6 @@ test = [
     "pytest-mock>=3.14.0",
     "hypothesis>=6.100.0",
 ]
-release = [
-    "python-semantic-release>=9.0.0",
-    "twine>=5.0.0",
-]
 
 [tool.ruff]
 target-version = "py311"
@@ -73,7 +88,7 @@ select = ["ALL"]
 max-doc-length = 90
 
 [tool.ruff.lint.per-file-ignores]
-"test/*" = ["S101", "D100", "D103", "D104"]
+"tests/*" = ["S101", "D100", "D103", "D104"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -102,17 +117,24 @@ filterwarnings = [
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
-branch = "restructure"
 upload_to_pypi = true
 upload_to_release = true
 build_command = "uv build"
 dist_path = "dist/"
 remove_dist = false
+tag_format = "v{version}"
+
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
 
 [tool.semantic_release.commit_parser_options]
 allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "style", "refactor", "test"]
 minor_tags = ["feat"]
 patch_tags = ["fix", "perf"]
+
+[tool.semantic_release.remote]
+type = "github"
 
 [tool.semantic_release.remote.token]
 env = "GH_TOKEN"
@@ -120,5 +142,3 @@ env = "GH_TOKEN"
 [tool.semantic_release.publish]
 dist_glob_patterns = ["dist/*"]
 upload_to_vcs_release = true
-
-

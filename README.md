@@ -1,8 +1,15 @@
 # Parametric UMAP
+
+[![CI](https://github.com/fcarli/parametric_umap/actions/workflows/ci.yml/badge.svg)](https://github.com/fcarli/parametric_umap/actions/workflows/ci.yml)
+[![PyPI version](https://img.shields.io/pypi/v/parametric-umap)](https://pypi.org/project/parametric-umap/)
+[![Python versions](https://img.shields.io/pypi/pyversions/parametric-umap)](https://pypi.org/project/parametric-umap/)
+[![License](https://img.shields.io/pypi/l/parametric-umap)](https://github.com/fcarli/parametric_umap/blob/main/LICENSE)
+
 A PyTorch implementation of Parametric UMAP (Uniform Manifold Approximation and Projection) for learning low-dimensional parametric embeddings of high-dimensional data.
 
 ## Install
-A proper installation of [PyTorch](https://pytorch.org) (possibly with GPU accelaration) is suggested before installing this package. The package can then be installed with
+
+A proper installation of [PyTorch](https://pytorch.org) (possibly with GPU acceleration) is suggested before installing this package. The package can then be installed with
 
 ```bash
 pip install parametric_umap
@@ -10,13 +17,15 @@ pip install parametric_umap
 
 To instead install the latest version of this repository use
 ```bash
-pip install git+https://github.com/mr-fcharles/parametric_umap.git
+pip install git+https://github.com/fcarli/parametric_umap.git
 ```
 
 ## Overview
+
 Parametric UMAP ([original paper](https://arxiv.org/abs/2009.12981)) extends the original UMAP algorithm by learning a neural network that can map new data points to the lower-dimensional space without having to rerun the entire optimization. This (unofficial) implementation provides a flexible and efficient way to perform parametric dimensionality reduction leveraging PyTorch and FAISS.
 
 ## Features
+
 - Neural network-based parametric mapping
 - Efficient nearest neighbor computation using FAISS
 - Sparse matrix operations for memory efficiency
@@ -24,7 +33,8 @@ Parametric UMAP ([original paper](https://arxiv.org/abs/2009.12981)) extends the
 - Model saving and loading capabilities
 - Correlation loss term to preserve distance relationships
 
-## Quick start
+## Quick Start
+
 ```python
 from parametric_umap import ParametricUMAP
 from sklearn.datasets import make_swiss_roll
@@ -36,11 +46,11 @@ X, color = make_swiss_roll(n_samples=n_samples, random_state=42)
 
 # Initialize and fit the model
 pumap = ParametricUMAP(
-    device='cuda:0'
+    device='cuda:0',
     n_components=2,
     hidden_dim=128,
     n_layers=3,
-    n_epochs=10
+    n_epochs=10,
 )
 
 # Fit and transform the data
@@ -54,10 +64,11 @@ new_embeddings = pumap.transform(X_new)
 Note that by default the data is moved to the specified device before training to accelerate training process. However, if your GPU card cannot fit the entire dataset in memory you can override this behavior by setting the `low_memory` argument to true as follows:
 
 ```python
-embeddings = pumap.fit_transform(X,low_memory=True)
+embeddings = pumap.fit_transform(X, low_memory=True)
 ```
 
 ## Key Parameters
+
 Hyperparameters default values follow the [original UMAP implementation](https://umap-learn.readthedocs.io/en/latest/)
 
 **UMAP parameters**
@@ -77,3 +88,40 @@ Hyperparameters default values follow the [original UMAP implementation](https:/
 - `batch_size`: Training batch size (default: 32)
 - `use_batchnorm`: Whether to use batch normalization in the embedding MLP (default: False)
 - `use_dropout`: Whether to use dropout in the embedding MLP (default: False)
+
+## Development
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
+
+```bash
+# Install all dependencies
+make install
+
+# Run tests
+make test
+
+# Lint and format
+make lint
+make format
+```
+
+## Citation
+
+If you use this package in your research, please cite the original Parametric UMAP paper:
+
+```bibtex
+@article{sainburg2021parametric,
+  title={Parametric UMAP Embeddings for Representation and Semisupervised Learning},
+  author={Sainburg, Tim and McInnes, Leland and Gentner, Timothy Q},
+  journal={Neural Computation},
+  volume={33},
+  number={11},
+  pages={2881--2907},
+  year={2021},
+  publisher={MIT Press}
+}
+```
+
+## License
+
+BSD License
