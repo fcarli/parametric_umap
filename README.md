@@ -37,7 +37,7 @@ uv sync --extra dev --extra test --extra examples --extra cpu
 
 Available CUDA extras: `cu118`, `cu121`, `cu124`, `cu126`, `cu128`.
 
-Apple Silicon Macs can use the PyTorch MPS backend by passing `device='mps'`.
+**Apple Silicon Macs** are automatically detected and use the [MPS backend](https://developer.apple.com/metal/pytorch/) — no extra configuration needed. You can also pass `device='mps'` explicitly.
 
 ## Overview
 
@@ -63,9 +63,8 @@ import numpy as np
 n_samples = 1000
 X, color = make_swiss_roll(n_samples=n_samples, random_state=42)
 
-# Initialize and fit the model
+# Initialize and fit the model (auto-detects CUDA / MPS / CPU)
 pumap = ParametricUMAP(
-    device='cuda:0',
     n_components=2,
     hidden_dim=128,
     n_layers=3,
@@ -80,6 +79,14 @@ X_new = np.random.rand(100, 3)
 new_embeddings = pumap.transform(X_new)
 ```
 
+You can also specify the device explicitly:
+
+```python
+pumap = ParametricUMAP(device='cuda:0')   # specific CUDA GPU
+pumap = ParametricUMAP(device='mps')      # Apple Silicon GPU
+pumap = ParametricUMAP(device='cpu')      # force CPU
+```
+
 Note that by default the data is moved to the specified device before training to accelerate training process. However, if your GPU card cannot fit the entire dataset in memory you can override this behavior by setting the `low_memory` argument to true as follows:
 
 ```python
@@ -88,19 +95,16 @@ embeddings = pumap.fit_transform(X, low_memory=True)
 
 ## Key Parameters
 
-Hyperparameters default values follow the [original UMAP implementation](https://umap-learn.readthedocs.io/en/latest/)
-
 **UMAP parameters**
-- `a`: parameter for scaling distances between embedded points
-- `b`: parameter for controlling sharpness of the curve's transition between attraction and repulsion
-- `n_neighbors`: number of neighbors to compute for UMAP knn graph (default: 15)
+- `n_neighbors`: Number of nearest neighbors for the UMAP knn graph (default: 15)
+- `a`: Parameter for scaling distances between embedded points (default: 0.1)
+- `b`: Parameter for controlling sharpness of the curve's transition between attraction and repulsion (default: 1.0)
 
 **Parametric model**
-- `device`: 'cpu' or 'cuda' (also specific device 'cuda:1', automatically uses GPU acceleration if GPU card is detected)
+- `device`: Compute device — auto-detected by default (CUDA > MPS > CPU). Pass a specific device like `'cuda:1'` or `'mps'` to override
 - `n_components`: Dimension of the output embedding (default: 2)
 - `hidden_dim`: Dimension of hidden layers in the MLP (default: 1024)
 - `n_layers`: Number of hidden layers (default: 3)
-- `n_neighbors`: Number of nearest neighbors (default: 15)
 - `correlation_weight`: Weight of the correlation loss term (default: 0.1)
 - `learning_rate`: Learning rate for optimization (default: 1e-4)
 - `n_epochs`: Number of training epochs (default: 10)

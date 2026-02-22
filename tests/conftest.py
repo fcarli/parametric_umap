@@ -91,6 +91,16 @@ def mock_cuda_unavailable():
 
 
 @pytest.fixture
+def mock_no_gpu():
+    """Mock both CUDA and MPS unavailability for testing CPU fallback."""
+    with (
+        patch("torch.cuda.is_available", return_value=False),
+        patch("torch.backends.mps.is_available", return_value=False),
+    ):
+        yield
+
+
+@pytest.fixture
 def temp_model_file():
     """Create temporary file for model save/load testing."""
     with tempfile.NamedTemporaryFile(suffix=".pth", delete=False) as f:

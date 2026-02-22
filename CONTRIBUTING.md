@@ -17,8 +17,13 @@ Thank you for your interest in contributing! This guide will help you get starte
 
 3. **Install dependencies:**
    ```bash
-   uv sync --all-extras
+   # macOS / Windows
+   uv sync --extra dev --extra test --extra examples
+
+   # Linux — CPU only
+   uv sync --extra dev --extra test --extra examples --extra cpu
    ```
+   > **Note:** Do not use `--all-extras` — the CUDA extras conflict with each other.
 
 4. **Install pre-commit hooks:**
    ```bash

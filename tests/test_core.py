@@ -20,7 +20,12 @@ class TestParametricUMAPInitialization:
         assert pumap.hidden_dim == 1024
         assert pumap.n_layers == 3
         assert pumap.n_neighbors == 15
-        assert pumap.device == "cpu"  # Should default to CPU when CUDA unavailable
+        if torch.cuda.is_available():
+            assert pumap.device == "cuda"
+        elif torch.backends.mps.is_available():
+            assert pumap.device == "mps"
+        else:
+            assert pumap.device == "cpu"
         assert not pumap.is_fitted
         assert pumap.model is None
 
@@ -42,8 +47,8 @@ class TestParametricUMAPInitialization:
         assert pumap.learning_rate == 1e-4
         assert pumap.batch_size == 128
 
-    def test_device_detection_cpu(self, mock_cuda_unavailable):
-        """Test automatic CPU device detection when CUDA unavailable."""
+    def test_device_detection_cpu(self, mock_no_gpu):
+        """Test automatic CPU device detection when no GPU available."""
         pumap = ParametricUMAP()
         assert pumap.device == "cpu"
 
