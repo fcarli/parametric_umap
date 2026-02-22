@@ -165,7 +165,6 @@ class TestParametricUMAPFitTransform:
             mock_fit.assert_called_once_with(
                 sample_2d_data,
                 resample_negatives=False,
-                n_processes=6,
                 low_memory=False,
                 random_state=0,
                 verbose=True,
@@ -186,7 +185,6 @@ class TestParametricUMAPFitTransform:
             mock_fit.assert_called_once_with(
                 sample_2d_data,
                 resample_negatives=False,
-                n_processes=6,
                 low_memory=True,
                 random_state=0,
                 verbose=False,

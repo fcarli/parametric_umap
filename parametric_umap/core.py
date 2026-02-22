@@ -158,7 +158,6 @@ class ParametricUMAP:
         self,
         X: np.ndarray | torch.Tensor,
         resample_negatives: bool = False,
-        n_processes: int = 6,
         low_memory: bool = False,
         random_state: int = 0,
         verbose: bool = True,
@@ -171,8 +170,6 @@ class ParametricUMAP:
             Training data. Can be numpy array or torch tensor.
         resample_negatives : bool, optional (default=False)
             Whether to resample negative edges at each epoch.
-        n_processes : int, optional (default=6)
-            Number of processes to use for parallel computation.
         low_memory : bool, optional (default=False)
             If True, keeps the data and edge weights on CPU and transfers
             per batch.  Trades speed for lower accelerator memory usage.
@@ -210,7 +207,6 @@ class ParametricUMAP:
             batch_size=self.batch_size,
             sample_first=True,
             random_state=random_state,
-            n_processes=n_processes,
             verbose=verbose,
         )
 
@@ -332,7 +328,6 @@ class ParametricUMAP:
         self,
         X: np.ndarray | torch.Tensor,
         resample_negatives: bool = False,
-        n_processes: int = 6,
         low_memory: bool = False,
         random_state: int = 0,
         verbose: bool = True,
@@ -345,8 +340,6 @@ class ParametricUMAP:
             Training data. Can be numpy array or torch tensor.
         resample_negatives : bool, optional (default=False)
             Whether to resample negative edges at each epoch.
-        n_processes : int, optional (default=6)
-            Number of processes to use for parallel computation.
         low_memory : bool, optional (default=False)
             If True, keeps the data and edge weights on CPU and transfers
             per batch.  Trades speed for lower accelerator memory usage.
@@ -364,7 +357,6 @@ class ParametricUMAP:
         self.fit(
             X,
             resample_negatives=resample_negatives,
-            n_processes=n_processes,
             low_memory=low_memory,
             random_state=random_state,
             verbose=verbose,

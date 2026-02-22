@@ -1,9 +1,5 @@
 """Edge dataset classes for graph-based training of parametric UMAP."""
 
-import multiprocessing
-import os
-from concurrent.futures import ProcessPoolExecutor
-
 import numpy as np
 from scipy.sparse import csr_matrix
 from tqdm.auto import tqdm
@@ -132,20 +128,18 @@ class EdgeDataset:
         self.all_edges = self.all_edges[perm]
         self.all_weights = self.all_weights[perm]
 
-    def sample_and_shuffle(self, random_state: int = 0, n_processes: int = 6, verbose: bool = True) -> None:
+    def sample_and_shuffle(self, random_state: int = 0, verbose: bool = True) -> None:
         """Sample negative edges and shuffle all edges.
 
         Parameters
         ----------
         random_state : int, optional
             Random seed for reproducibility, by default 0
-        n_processes : int, optional
-            Number of processes for parallel sampling, by default 6
         verbose : bool, optional
             Whether to show progress bars, by default True
 
         """
-        self.sample_negative_edges(random_state=random_state, n_processes=n_processes, verbose=verbose)
+        self.sample_negative_edges(random_state=random_state, verbose=verbose)
         self.all_edges = np.concatenate([self.pos_edges, self.neg_edges], axis=0)
         self.all_weights = np.concatenate([self.pos_weights, np.zeros(len(self.neg_edges), dtype=np.float32)])
 
@@ -156,7 +150,6 @@ class EdgeDataset:
         batch_size: int,
         sample_first: bool = False,
         random_state: int = 0,
-        n_processes: int = 6,
         verbose: bool = True,
     ) -> EdgeBatchIterator:
         """Return an iterator that yields batches of edges and their weights.
@@ -169,8 +162,6 @@ class EdgeDataset:
             Whether to sample and shuffle edges before creating loader, by default False
         random_state : int, optional
             Random seed for reproducibility, by default 0
-        n_processes : int, optional
-            Number of processes for parallel sampling, by default 6
         verbose : bool, optional
             Whether to show progress bars, by default True
 
@@ -181,101 +172,31 @@ class EdgeDataset:
 
         """
         if sample_first:
-            self.sample_and_shuffle(random_state=random_state, n_processes=n_processes, verbose=verbose)
+            self.sample_and_shuffle(random_state=random_state, verbose=verbose)
 
         if self.all_edges is None:
             raise ValueError("Must call sample_and_shuffle() before getting loader")
 
         return EdgeBatchIterator(self.all_edges, self.all_weights, batch_size)
 
-    def sample_negative_edges(self, random_state: int = 0, n_processes: int = 6, verbose: bool = True) -> None:
+    def sample_negative_edges(self, random_state: int = 0, verbose: bool = True) -> None:
         """Sample negative edges for the graph.
 
         Parameters
         ----------
         random_state : int, optional
             Random seed for reproducibility, by default 0
-        n_processes : int, optional
-            Number of processes for parallel sampling, by default 6
         verbose : bool, optional
             Whether to show progress bars, by default True
 
         """
-        self.neg_edges = self._sample_negative_edges(
-            self.pos_edges[:, 0].tolist(),
-            random_state=random_state,
-            n_processes=n_processes,
-            verbose=verbose,
-        )
-
-    def _sample_negative_edges(
-        self,
-        node_list: list[int],
-        k: int = 5,
-        random_state: int = 0,
-        n_processes: int = 6,
-        verbose: bool = True,
-    ) -> np.ndarray:
-        """Sample k negative edges for each node in parallel.
-
-        Parameters
-        ----------
-        node_list : List[int]
-            List of nodes to sample negative edges for
-        k : int, optional
-            Number of negative edges per node, by default 5
-        random_state : int, optional
-            Random seed for reproducibility, by default 0
-        n_processes : int, optional
-            Number of processes for parallel sampling, by default 6
-        verbose : bool, optional
-            Whether to show progress bars, by default True
-
-        Returns
-        -------
-        np.ndarray
-            Array of shape (n_neg_edges, 2) with sampled negative edges
-
-        """
-        n_processes = os.cpu_count() if n_processes == -1 else min(n_processes, os.cpu_count())
-
         if verbose:
             print("Sampling negative edges...")
 
-        # Fast path: skip multiprocessing overhead when single-threaded
-        if n_processes <= 1:
-            return self._sample_negative_edges_chunk(node_list, k=k, random_state=random_state)
-
-        # Create a base RNG to generate seeds for each process
-        base_rng = np.random.RandomState(random_state)
-        process_seeds = base_rng.randint(0, np.iinfo(np.int32).max, size=n_processes)
-
-        # Split node_list into chunks
-        node_chunks = np.array_split(node_list, n_processes)
-
-        # Use "spawn" context to avoid deadlocks when OpenMP / PyTorch / FAISS
-        # have already been loaded in the parent process (default "fork" on
-        # macOS copies the OMP runtime state and can hang or segfault).
-        ctx = multiprocessing.get_context("spawn")
-        with ProcessPoolExecutor(max_workers=n_processes, mp_context=ctx) as executor:
-            futures = []
-            for chunk, seed in zip(node_chunks, process_seeds, strict=False):
-                futures.append(
-                    executor.submit(
-                        self._sample_negative_edges_chunk,
-                        chunk,
-                        k=k,
-                        random_state=seed,
-                    ),
-                )
-
-            # Use position=0 to ensure proper display with nested progress bars
-            chunks = [
-                future.result()
-                for future in tqdm(futures, total=len(futures), desc="Completed processes", position=0, leave=True)
-            ]
-
-        return np.concatenate(chunks, axis=0) if chunks else np.empty((0, 2), dtype=np.int64)
+        self.neg_edges = self._sample_negative_edges_chunk(
+            self.pos_edges[:, 0].tolist(),
+            random_state=random_state,
+        )
 
     def _sample_negative_edges_chunk(
         self,

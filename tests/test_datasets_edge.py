@@ -276,12 +276,11 @@ class TestEdgeDataset:
         """Test negative edge sampling."""
         dataset = EdgeDataset(simple_sparse_matrix)
 
-        # Mock the parallel processing to avoid complexity
         mock_result = np.array([(0, 3), (0, 4), (1, 3), (1, 4)], dtype=np.int64)
-        with patch.object(dataset, "_sample_negative_edges") as mock_sample:
+        with patch.object(dataset, "_sample_negative_edges_chunk") as mock_sample:
             mock_sample.return_value = mock_result
 
-            dataset.sample_negative_edges(random_state=42, n_processes=1, verbose=False)
+            dataset.sample_negative_edges(random_state=42, verbose=False)
 
             assert dataset.neg_edges is not None
             assert len(dataset.neg_edges) > 0
@@ -300,7 +299,7 @@ class TestEdgeDataset:
             mock_sample.return_value = None
             dataset.neg_edges = mock_neg
 
-            dataset.sample_and_shuffle(random_state=42, n_processes=1, verbose=False)
+            dataset.sample_and_shuffle(random_state=42, verbose=False)
 
             assert dataset.all_edges is not None
             assert dataset.all_weights is not None
@@ -317,7 +316,7 @@ class TestEdgeDataset:
         with patch("parametric_umap.datasets.edge_dataset.tqdm") as mock_tqdm:
             mock_tqdm.side_effect = lambda x, *args, **kwargs: x
 
-            dataset.sample_and_shuffle(random_state=42, n_processes=1, verbose=False)
+            dataset.sample_and_shuffle(random_state=42, verbose=False)
 
         n_pos = len(dataset.pos_edges)
         n_neg = len(dataset.neg_edges)
@@ -341,7 +340,6 @@ class TestEdgeDataset:
                 batch_size=2,
                 sample_first=True,
                 random_state=42,
-                n_processes=1,
                 verbose=False,
             )
 
@@ -476,12 +474,10 @@ class TestEdgeDataset:
         with patch("parametric_umap.datasets.edge_dataset.tqdm") as mock_tqdm:
             mock_tqdm.side_effect = lambda x, *args, **kwargs: x  # Disable progress bars
 
-            neg_edges = dataset._sample_negative_edges(
+            neg_edges = dataset._sample_negative_edges_chunk(
                 [0, 1, 2],
                 k=2,
                 random_state=42,
-                n_processes=1,
-                verbose=False,
             )
 
             assert isinstance(neg_edges, np.ndarray)
@@ -514,7 +510,7 @@ class TestEdgeDatasetIntegration:
         with patch("parametric_umap.datasets.edge_dataset.tqdm") as mock_tqdm:
             mock_tqdm.side_effect = lambda x, *args, **kwargs: x
 
-            dataset.sample_and_shuffle(random_state=42, n_processes=1, verbose=False)
+            dataset.sample_and_shuffle(random_state=42, verbose=False)
 
             assert dataset.all_edges is not None
             assert dataset.all_weights is not None
@@ -547,7 +543,7 @@ class TestEdgeDatasetIntegration:
         with patch("parametric_umap.datasets.edge_dataset.tqdm") as mock_tqdm:
             mock_tqdm.side_effect = lambda x, *args, **kwargs: x
 
-            dataset.sample_and_shuffle(random_state=42, n_processes=1, verbose=False)
+            dataset.sample_and_shuffle(random_state=42, verbose=False)
 
             # Check that we have both positive and negative edges
             assert len(dataset.pos_edges) > 0
@@ -571,8 +567,8 @@ class TestEdgeDatasetIntegration:
         with patch("parametric_umap.datasets.edge_dataset.tqdm") as mock_tqdm:
             mock_tqdm.side_effect = lambda x, *args, **kwargs: x
 
-            dataset1.sample_and_shuffle(random_state=42, n_processes=1, verbose=False)
-            dataset2.sample_and_shuffle(random_state=42, n_processes=1, verbose=False)
+            dataset1.sample_and_shuffle(random_state=42, verbose=False)
+            dataset2.sample_and_shuffle(random_state=42, verbose=False)
 
             # Results should be identical
             np.testing.assert_array_equal(dataset1.all_edges, dataset2.all_edges)
@@ -701,19 +697,3 @@ class TestEdgeDatasetErrorHandling:
             iterator.current = 10
             next(iterator)
 
-    def test_multiprocessing_errors(self):
-        """Test multiprocessing error handling."""
-        matrix = sparse.csr_matrix(([1], ([0], [1])), shape=(2, 2))
-        dataset = EdgeDataset(matrix)
-
-        # Test with invalid n_processes
-        with patch("parametric_umap.datasets.edge_dataset.os.cpu_count", return_value=4):
-            # Should handle n_processes gracefully
-            result = dataset._sample_negative_edges(
-                [0],
-                k=1,
-                random_state=42,
-                n_processes=100,
-                verbose=False,
-            )
-            assert isinstance(result, np.ndarray)
