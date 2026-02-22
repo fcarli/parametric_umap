@@ -31,7 +31,7 @@ class ParametricUMAP:
         learning_rate (float): Learning rate for the optimizer
         n_epochs (int): Number of training epochs
         batch_size (int): Batch size for training
-        device (str): Device to use for computations ('cpu' or 'cuda')
+        device (str or torch.device): Device to use for computations ('cpu' or 'cuda')
         use_batchnorm (bool): Whether to use batch normalization in the MLP
         use_dropout (bool): Whether to use dropout in the MLP
         compile_model (bool): Whether to apply ``torch.compile`` to the MLP
@@ -52,7 +52,7 @@ class ParametricUMAP:
         learning_rate: float = 1e-4,
         n_epochs: int = 10,
         batch_size: int = 32,
-        device: str | None = None,
+        device: str | torch.device | None = None,
         use_batchnorm: bool = False,
         use_dropout: bool = False,
         compile_model: bool = False,
@@ -79,7 +79,7 @@ class ParametricUMAP:
             Number of training epochs
         batch_size : int
             Batch size for training
-        device : str, optional
+        device : str or torch.device, optional
             Device to use for computations ('cpu', 'cuda', or 'mps').
             Auto-detected if not specified (CUDA > MPS > CPU).
         use_batchnorm : bool
