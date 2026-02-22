@@ -1,4 +1,5 @@
 """Utility functions for the Parametric UMAP implementation."""
+
 import torch
 
 
@@ -42,7 +43,7 @@ def compute_correlation_loss(X_distances: torch.Tensor, Z_distances: torch.Tenso
     X_std = torch.sqrt((X_centered**2).mean())
     Z_std = torch.sqrt((Z_centered**2).mean())
 
-    correlation = numerator / (X_std * Z_std)
+    correlation = numerator / (torch.clamp(X_std, min=1e-8) * torch.clamp(Z_std, min=1e-8))
 
     # Return negative correlation as we want to maximize correlation
     return -correlation
