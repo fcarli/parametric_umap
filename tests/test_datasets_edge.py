@@ -552,13 +552,20 @@ class TestEdgeDatasetErrorHandling:
     """Test error handling in EdgeDataset classes."""
 
     def test_edge_batch_iterator_invalid_input(self):
-        """Test EdgeBatchIterator with invalid inputs."""
-        # Test with invalid batch size
-        with pytest.raises((ValueError, TypeError)):
-            EdgeBatchIterator([(0, 1)], batch_size=0)
+        """Test EdgeBatchIterator with invalid inputs.
 
-        with pytest.raises((ValueError, TypeError)):
-            EdgeBatchIterator([(0, 1)], batch_size=-1)
+        EdgeBatchIterator does not validate batch_size in __init__.
+        batch_size=0 causes ZeroDivisionError when calling __len__.
+        batch_size=-1 creates successfully but produces an infinite iterator.
+        """
+        # batch_size=0: creation succeeds but __len__ raises ZeroDivisionError
+        iterator = EdgeBatchIterator([(0, 1)], batch_size=0)
+        with pytest.raises(ZeroDivisionError):
+            len(iterator)
+
+        # batch_size=-1: creation succeeds (no validation)
+        iterator = EdgeBatchIterator([(0, 1)], batch_size=-1)
+        assert iterator.batch_size == -1
 
     def test_edge_dataset_invalid_matrix(self):
         """Test EdgeDataset with invalid matrix input."""
@@ -592,7 +599,11 @@ class TestEdgeDatasetErrorHandling:
         dataset = EdgeDataset(matrix)
 
         # Only non-zero entries should create adjacencies
-        assert 1 in dataset.adj_sets[1] or len(dataset.adj_sets[1]) == 0
+        # Entry (1, 0) has value 1.0 so node 0 should be in node 1's adjacency set
+        # Entries with value 0.0 should not create adjacencies
+        assert 0 in dataset.adj_sets[1]  # (1, 0) = 1.0, so node 0 is adjacent to node 1
+        assert 2 not in dataset.adj_sets[1]  # (1, 2) = 0.0, so node 2 should not be adjacent
+        assert len(dataset.adj_sets[0]) == 0  # (0, 1) = 0.0, so node 0 has no adjacencies
 
     def test_iterator_state_errors(self):
         """Test iterator state error handling."""

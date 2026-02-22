@@ -303,7 +303,7 @@ class TestVariableDataset:
         """Test get_index method without index mapping raises error."""
         dataset = VariableDataset(sample_2d_data)
 
-        with pytest.raises(AssertionError, match="Indexes map not initialized"):
+        with pytest.raises(ValueError, match="Indexes map not initialized"):
             dataset.get_index(0)
 
     def test_get_values_by_indexes(self, sample_2d_data):

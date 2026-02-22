@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  # Prevent dual-OpenMP conflicts between FAISS and PyTorch
+  KMP_DUPLICATE_LIB_OK: "TRUE"
+  OMP_NUM_THREADS: 1
+
 jobs:
   lint:
     runs-on: ubuntu-latest

@@ -1,6 +1,6 @@
 """Comprehensive tests for the ParametricUMAP core class."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -95,26 +95,13 @@ class TestParametricUMAPTransform:
     """Test ParametricUMAP transform functionality."""
 
     @pytest.fixture
-    def fitted_pumap(self, sample_2d_data, mock_faiss_computation):
+    def fitted_pumap(self, sample_2d_data):
         """Create a fitted ParametricUMAP instance for testing."""
         pumap = ParametricUMAP(n_epochs=1)
 
-        with patch.object(pumap, "_init_model") as mock_init:
-            mock_model = Mock()
-            mock_model.train = Mock()
-            mock_model.eval = Mock()
-            mock_model.to = Mock(return_value=mock_model)
-            mock_model.parameters = Mock(return_value=[])
-
-            # Mock forward pass to return proper shape
-            def mock_forward(x):
-                return torch.randn(x.shape[0], pumap.n_components)
-
-            mock_model.forward = mock_forward
-            mock_model.__call__ = mock_forward
-
-            mock_init.return_value = mock_model
-            pumap.fit(sample_2d_data, verbose=False)
+        # Initialize a real model and mark as fitted (skip actual training)
+        pumap._init_model(sample_2d_data.shape[1])
+        pumap.is_fitted = True
 
         return pumap
 
@@ -137,7 +124,7 @@ class TestParametricUMAPTransform:
         """Test transform on unfitted model raises error."""
         pumap = ParametricUMAP()
 
-        with pytest.raises(RuntimeError, match="not fitted"):
+        with pytest.raises(RuntimeError, match="must be fitted"):
             pumap.transform(sample_2d_data)
 
     def test_transform_different_dimensions(self, fitted_pumap):
@@ -170,7 +157,7 @@ class TestParametricUMAPFitTransform:
 
             result = pumap.fit_transform(sample_2d_data)
 
-            mock_fit.assert_called_once_with(sample_2d_data)
+            mock_fit.assert_called_once_with(sample_2d_data, verbose=True, low_memory=False)
             mock_transform.assert_called_once_with(sample_2d_data)
             np.testing.assert_array_equal(result, expected_result)
 
@@ -182,9 +169,9 @@ class TestParametricUMAPFitTransform:
             mock_fit.return_value = pumap
             mock_transform.return_value = np.random.randn(len(sample_2d_data), 2)
 
-            pumap.fit_transform(sample_2d_data, y=None, low_memory=True)
+            pumap.fit_transform(sample_2d_data, verbose=False, low_memory=True)
 
-            mock_fit.assert_called_once_with(sample_2d_data, y=None, low_memory=True)
+            mock_fit.assert_called_once_with(sample_2d_data, verbose=False, low_memory=True)
 
 
 class TestParametricUMAPPersistence:
@@ -212,7 +199,7 @@ class TestParametricUMAPPersistence:
         """Test saving an unfitted model raises error."""
         pumap = ParametricUMAP()
 
-        with pytest.raises(RuntimeError, match="not fitted"):
+        with pytest.raises(RuntimeError, match="must be fitted"):
             pumap.save(str(temp_model_file))
 
     def test_load_model(self, fitted_pumap_for_save, temp_model_file):
@@ -220,9 +207,8 @@ class TestParametricUMAPPersistence:
         # Save model first
         fitted_pumap_for_save.save(str(temp_model_file))
 
-        # Create new instance and load
-        new_pumap = ParametricUMAP()
-        new_pumap.load(str(temp_model_file))
+        # Load using classmethod
+        new_pumap = ParametricUMAP.load(str(temp_model_file))
 
         assert new_pumap.is_fitted
         assert new_pumap.model is not None
@@ -239,9 +225,8 @@ class TestParametricUMAPPersistence:
         # Save original model
         fitted_pumap_for_save.save(str(temp_model_file))
 
-        # Load into new instance
-        new_pumap = ParametricUMAP()
-        new_pumap.load(str(temp_model_file))
+        # Load using classmethod
+        new_pumap = ParametricUMAP.load(str(temp_model_file))
 
         # Both should have same parameters
         assert new_pumap.n_components == fitted_pumap_for_save.n_components
@@ -252,21 +237,16 @@ class TestParametricUMAPPersistence:
 class TestParametricUMAPDeviceHandling:
     """Test ParametricUMAP device handling functionality."""
 
-    def test_cpu_device_explicit(self, sample_2d_data, mock_faiss_computation):
+    def test_cpu_device_explicit(self, sample_2d_data):
         """Test explicit CPU device setting."""
         pumap = ParametricUMAP(device="cpu", n_epochs=1)
 
-        with patch.object(pumap, "_init_model") as mock_init:
-            mock_model = Mock()
-            mock_model.train = Mock()
-            mock_model.to = Mock(return_value=mock_model)
-            mock_model.parameters = Mock(return_value=[])
-            mock_init.return_value = mock_model
+        # Verify the device is set to CPU
+        assert pumap.device == "cpu"
 
-            pumap.fit(sample_2d_data, verbose=False)
-
-            # Model should be moved to CPU
-            mock_model.to.assert_called_with("cpu")
+        # Initialize model and verify it's on CPU
+        pumap._init_model(sample_2d_data.shape[1])
+        assert next(pumap.model.parameters()).device == torch.device("cpu")
 
     def test_device_assignment(self):
         """Test that device is assigned without validation."""
