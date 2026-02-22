@@ -284,9 +284,8 @@ class ParametricUMAP:
 
         X = np.asarray(X, dtype=np.float32)
         if X.shape[1] != self.model.input_dim:
-            raise ValueError(
-                f"X has {X.shape[1]} features, but model was fitted with {self.model.input_dim} features"
-            )
+            msg = f"X has {X.shape[1]} features, but model was fitted with {self.model.input_dim} features"
+            raise ValueError(msg)
 
         self.model.eval()
         X = torch.tensor(X, dtype=torch.float32).to(self.device)
@@ -299,8 +298,11 @@ class ParametricUMAP:
     def fit_transform(
         self,
         X: np.ndarray | torch.Tensor,
-        verbose: bool = True,
+        resample_negatives: bool = False,
+        n_processes: int = 6,
         low_memory: bool = False,
+        random_state: int = 0,
+        verbose: bool = True,
     ) -> np.ndarray:
         """Fit the model with X and apply the dimensionality reduction on X.
 
@@ -308,11 +310,17 @@ class ParametricUMAP:
         ----------
         X : array-like of shape (n_samples, n_features)
             Training data. Can be numpy array or torch tensor.
-        verbose : bool, optional (default=True)
-            Whether to display progress bars and print statements.
+        resample_negatives : bool, optional (default=False)
+            Whether to resample negative edges at each epoch.
+        n_processes : int, optional (default=6)
+            Number of processes to use for parallel computation.
         low_memory : bool, optional (default=False)
             If True, keeps the data and edge weights on CPU and transfers
             per batch.  Trades speed for lower accelerator memory usage.
+        random_state : int, optional (default=0)
+            Random state for reproducibility.
+        verbose : bool, optional (default=True)
+            Whether to display progress bars and print statements.
 
         Returns
         -------
@@ -320,7 +328,14 @@ class ParametricUMAP:
             Transformed data in the low-dimensional space.
 
         """
-        self.fit(X, verbose=verbose, low_memory=low_memory)
+        self.fit(
+            X,
+            resample_negatives=resample_negatives,
+            n_processes=n_processes,
+            low_memory=low_memory,
+            random_state=random_state,
+            verbose=verbose,
+        )
         return self.transform(X)
 
     def save(self, path: str) -> None:
