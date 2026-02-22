@@ -277,6 +277,8 @@ class EdgeDataset:
             List of sampled negative edges for the chunk
 
         """
+        if k < 0:
+            raise ValueError(f"k must be >= 0, got {k}")
         # Remove process_id parameter since we now use unique seeds
         rng = np.random.RandomState(random_state)
         n_nodes = len(self.adj_sets)
@@ -284,27 +286,19 @@ class EdgeDataset:
 
         # Use position=1 for nested progress bar
         for node in tqdm(node_list, desc="Processing nodes", position=1, leave=False):
-            # Get the set of nodes that are already connected
             connected = self.adj_sets[node]
+            max_candidates = n_nodes - len(connected) - 1  # exclude self and neighbors
 
-            # Create array of all possible target nodes
-            all_nodes = np.arange(n_nodes)
+            if max_candidates <= 0:
+                continue
 
-            # Create mask for nodes that are not connected
-            mask = ~np.isin(all_nodes, list(connected))
-            mask[node] = False
+            n_samples = min(k, max_candidates)
+            targets: set[int] = set()
+            while len(targets) < n_samples:
+                candidate = rng.randint(0, n_nodes)
+                if candidate != node and candidate not in connected:
+                    targets.add(candidate)
 
-            # Get array of possible negative edge targets
-            candidates = all_nodes[mask]
-
-            # Sample k targets without replacement
-            if len(candidates) >= k:
-                targets = rng.choice(candidates, size=k, replace=False)
-            else:
-                # If fewer candidates than k, take all available
-                targets = candidates
-
-            # Add the negative edges as tuples
             neg_edges.extend((node, target) for target in targets)
 
         # remove duplicates
