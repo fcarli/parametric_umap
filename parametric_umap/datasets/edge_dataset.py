@@ -1,5 +1,6 @@
 """Edge dataset classes for graph-based training of parametric UMAP."""
 
+import multiprocessing
 import os
 from concurrent.futures import ProcessPoolExecutor
 
@@ -214,6 +215,13 @@ class EdgeDataset:
         """
         n_processes = os.cpu_count() if n_processes == -1 else min(n_processes, os.cpu_count())
 
+        if verbose:
+            print("Sampling negative edges...")
+
+        # Fast path: skip multiprocessing overhead when single-threaded
+        if n_processes <= 1:
+            return self._sample_negative_edges_chunk(node_list, k=k, random_state=random_state)
+
         # Create a base RNG to generate seeds for each process
         base_rng = np.random.RandomState(random_state)
         process_seeds = base_rng.randint(0, np.iinfo(np.int32).max, size=n_processes)
@@ -221,11 +229,11 @@ class EdgeDataset:
         # Split node_list into chunks
         node_chunks = np.array_split(node_list, n_processes)
 
-        if verbose:
-            print("Sampling negative edges...")
-
-        # Run parallel processing with unique seeds
-        with ProcessPoolExecutor(max_workers=n_processes) as executor:
+        # Use "spawn" context to avoid deadlocks when OpenMP / PyTorch / FAISS
+        # have already been loaded in the parent process (default "fork" on
+        # macOS copies the OMP runtime state and can hang or segfault).
+        ctx = multiprocessing.get_context("spawn")
+        with ProcessPoolExecutor(max_workers=n_processes, mp_context=ctx) as executor:
             futures = []
             for chunk, seed in zip(node_chunks, process_seeds, strict=False):
                 futures.append(

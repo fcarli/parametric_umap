@@ -1,7 +1,5 @@
 """Parametric UMAP implementation for dimensionality reduction using neural networks."""
 
-import warnings
-
 import numpy as np
 import torch
 from torch import nn
@@ -174,15 +172,11 @@ class ParametricUMAP:
         P_sym = compute_all_p_umap(X, k=self.n_neighbors)
         ed = EdgeDataset(P_sym)
 
-        # MPS does not support sparse tensors, so always keep them on CPU (like low_memory mode)
-        _sparse_on_cpu = low_memory or self.device == "mps" or str(self.device).startswith("mps")
-        if _sparse_on_cpu and not low_memory:
-            warnings.warn(
-                "MPS does not support sparse tensors. The probability matrix will be kept on CPU "
-                "and transferred per batch (equivalent to low_memory=True). "
-                "Model training still runs on MPS.",
-                stacklevel=2,
-            )
+        # TorchSparseDataset uses a plain dict internally, so it is always
+        # lightweight and device-independent.  In low_memory mode we keep the
+        # returned tensors on CPU and transfer per batch; otherwise they are
+        # created directly on the compute device.
+        _sparse_on_cpu = low_memory
         target_dataset = TorchSparseDataset(P_sym) if _sparse_on_cpu else TorchSparseDataset(P_sym).to(self.device)
 
         # Initialize optimizer

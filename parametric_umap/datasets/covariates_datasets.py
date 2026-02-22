@@ -6,74 +6,80 @@ from scipy.sparse import csr_matrix
 
 
 class TorchSparseDataset:
-    """A dataset class for handling sparse matrices in PyTorch.
+    """A dataset class for handling probability matrices in PyTorch.
+
+    Stores sparse COO data as sorted linear indices and values on the
+    target device.  Look-ups use ``torch.searchsorted`` so everything
+    stays on-device (CPU, CUDA, or MPS) with O(nnz) memory and
+    O(batch × log nnz) query time.
 
     Parameters
     ----------
     P_sym : csr_matrix
-        Symmetric probability matrix to convert to torch sparse format
+        Symmetric probability matrix
     device : str, optional
-        Device to store the sparse tensor on ('cpu' or 'cuda:X'), by default 'cpu'
+        Device for the backing tensors, by default 'cpu'
 
     """
 
     def __init__(self, P_sym: csr_matrix, device: str = "cpu") -> None:
-        """Initialize the sparse dataset from a CSR probability matrix."""
+        """Initialize the dataset from a CSR probability matrix."""
         coo = P_sym.tocoo()
-        values = torch.FloatTensor(coo.data)
-        indices = torch.LongTensor(np.vstack((coo.row, coo.col)))
+        n = P_sym.shape[0]
 
-        # Create sparse tensor and move to device
-        self.P_sparse = torch.sparse_coo_tensor(
-            indices,
-            values,
-            size=P_sym.shape,
-            device=device,
-        )
+        rows = torch.tensor(coo.row, dtype=torch.long)
+        cols = torch.tensor(coo.col, dtype=torch.long)
+        keys = rows * n + cols
+
+        # Sort by linear index so searchsorted works.
+        order = torch.argsort(keys)
+        self._keys = keys[order].to(device)
+        self._values = torch.tensor(coo.data, dtype=torch.float32)[order].to(device)
+        self._n = n
+        self._nnz = P_sym.nnz
         self.device = device
 
     def __getitem__(self, idx: tuple[int, int] | list[tuple[int, int]]) -> torch.Tensor:
-        """Get elements from the sparse tensor.
+        """Look up probability values for one or more (i, j) pairs.
 
         Parameters
         ----------
         idx : Union[Tuple[int, int], List[Tuple[int, int]]]
-            Either a single tuple of (i,j) indices or a list of such tuples
+            Either a single (i, j) tuple or a list of such tuples.
 
         Returns
         -------
         torch.Tensor
-            Tensor containing the requested values, 0 if index not found
+            Requested values (0 where no edge exists).
 
         """
         if isinstance(idx, tuple) and isinstance(idx[0], int):
-            # Single index access
-            i, j = idx
-            indices = torch.tensor([[i], [j]], device=self.device)
-            return self.P_sparse.index_select(0, indices[0]).index_select(1, indices[1]).to_dense().squeeze()
-        # Multiple index access
-        indices = torch.tensor(list(zip(*idx, strict=False)), device=self.device)
-        values = self.P_sparse.index_select(0, indices[0]).index_select(1, indices[1]).to_dense().diagonal()
-        return values
+            query = torch.tensor([idx[0] * self._n + idx[1]], dtype=torch.long, device=self.device)
+        else:
+            rows, cols = zip(*idx, strict=False)
+            rows_t = torch.tensor(rows, dtype=torch.long, device=self.device)
+            cols_t = torch.tensor(cols, dtype=torch.long, device=self.device)
+            query = rows_t * self._n + cols_t
+
+        pos = torch.searchsorted(self._keys, query).clamp(max=self._nnz - 1)
+        found = self._keys[pos] == query
+        result = torch.where(found, self._values[pos], torch.zeros_like(self._values[pos]))
+
+        if isinstance(idx, tuple) and isinstance(idx[0], int):
+            return result.squeeze()
+        return result
 
     def __len__(self) -> int:
-        """Get the number of non-zero elements in the sparse tensor.
-
-        Returns
-        -------
-        int
-            Number of non-zero elements
-
-        """
-        return self.P_sparse._nnz()
+        """Return the number of non-zero elements."""
+        return self._nnz
 
     def to(self, device: str) -> "TorchSparseDataset":
-        """Move the sparse tensor to the specified device.
+        """Move the backing storage to *device*.
 
         Parameters
         ----------
         device : str
-            Target device ('cpu' or 'cuda:X')
+            Target device ('cpu', 'cuda:X', or 'mps')
 
         Returns
         -------
@@ -81,7 +87,8 @@ class TorchSparseDataset:
             Self for method chaining
 
         """
-        self.P_sparse = self.P_sparse.to(device)
+        self._keys = self._keys.to(device)
+        self._values = self._values.to(device)
         self.device = device
         return self
 
