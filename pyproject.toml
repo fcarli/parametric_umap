@@ -83,12 +83,47 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["ALL"]
+ignore = [
+    # Style rules that conflict with project conventions
+    "COM812",  # Trailing comma conflicts with ruff formatter
+    "D203",    # Conflicts with D211 (no-blank-line-before-class)
+    "D213",    # Conflicts with D212 (multi-line-summary-first-line)
+
+    # Rules too strict for ML/scientific computing
+    "N803",    # Argument name should be lowercase (X, Z are standard ML notation)
+    "N806",    # Variable name should be lowercase (same reason)
+    "FBT",     # Boolean positional/default arguments (common for ML config params)
+    "PLR0913", # Too many function arguments (ML models naturally have many params)
+    "PLR2004", # Magic values in comparisons (common in tests and ML code)
+
+    # Annotation rules (separate effort)
+    "ANN",     # Type annotations not yet complete across codebase
+
+    # Exception message style (too strict)
+    "TRY003",  # Long exception messages
+    "EM101",   # Exception string literals
+
+    # Readability preferences (keep explicit names before return)
+    "RET504",  # Unnecessary assignment before return
+    "SIM108",  # Ternary operator (if/else blocks often clearer)
+
+    # Noise for this project
+    "NPY002",  # Legacy numpy.random (works fine, large refactor to change)
+    "W505",    # Doc line too long (already have 120 char line length)
+    "INP001",  # Missing __init__.py (false positives for examples dir)
+    "T201",    # Print statements (used in examples and verbose output)
+    "ERA001",  # Commented-out code (false positives on descriptive comments)
+    "TD002",   # Missing author in TODO
+    "TD003",   # Missing issue link in TODO
+    "FIX002",  # Line contains TODO
+]
 
 [tool.ruff.lint.pycodestyle]
 max-doc-length = 90
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "D100", "D103", "D104"]
+"tests/*" = ["S101", "SLF001", "ARG", "PT006", "PT012", "PLC0415"]
+"parametric_umap/datasets/covariates_datasets.py" = ["SLF001"]  # torch sparse _nnz() has no public API
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

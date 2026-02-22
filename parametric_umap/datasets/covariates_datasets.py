@@ -1,3 +1,5 @@
+"""Dataset classes for handling sparse matrices and variable data in PyTorch."""
+
 import numpy as np
 import torch
 from scipy.sparse import csr_matrix
@@ -16,6 +18,7 @@ class TorchSparseDataset:
     """
 
     def __init__(self, P_sym: csr_matrix, device: str = "cpu") -> None:
+        """Initialize the sparse dataset from a CSR probability matrix."""
         coo = P_sym.tocoo()
         values = torch.FloatTensor(coo.data)
         indices = torch.LongTensor(np.vstack((coo.row, coo.col)))
@@ -96,6 +99,7 @@ class VariableDataset:
     """
 
     def __init__(self, X: np.ndarray, indexes: list[int] | None = None) -> None:
+        """Initialize the variable dataset from a numpy array."""
         self.X = torch.tensor(X, dtype=torch.float32)
         self.indexes_map: dict[int, int] | None = None
 
@@ -145,11 +149,13 @@ class VariableDataset:
 
         Raises
         ------
-        AssertionError
+        ValueError
             If indexes_map is not initialized
 
         """
-        assert self.indexes_map is not None, "Indexes map not initialized"
+        if self.indexes_map is None:
+            msg = "Indexes map not initialized"
+            raise ValueError(msg)
         return self.indexes_map[idx]
 
     def get_values_by_indexes(self, indexes: list[int]) -> torch.Tensor:
