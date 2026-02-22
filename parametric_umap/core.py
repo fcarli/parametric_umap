@@ -34,7 +34,8 @@ class ParametricUMAP:
         device (str): Device to use for computations ('cpu' or 'cuda')
         use_batchnorm (bool): Whether to use batch normalization in the MLP
         use_dropout (bool): Whether to use dropout in the MLP
-        model (Optional[MLP]): The neural network model
+        compile_model (bool): Whether to apply ``torch.compile`` to the MLP
+        model (Optional[MLP]): The neural network model (possibly compiled)
         is_fitted (bool): Whether the model has been fitted
 
     """
@@ -54,6 +55,7 @@ class ParametricUMAP:
         device: str | None = None,
         use_batchnorm: bool = False,
         use_dropout: bool = False,
+        compile_model: bool = False,
     ) -> None:
         """Initialize ParametricUMAP.
 
@@ -84,6 +86,10 @@ class ParametricUMAP:
             Whether to use batch normalization in the MLP
         use_dropout : bool
             Whether to use dropout in the MLP
+        compile_model : bool
+            Whether to apply ``torch.compile`` to the MLP. Can yield
+            10-30 % faster training on PyTorch 2.x at the cost of a
+            one-time compilation delay on the first forward pass.
 
         """
         self.n_components = n_components
@@ -106,10 +112,18 @@ class ParametricUMAP:
         self.device = device
         self.use_batchnorm = use_batchnorm
         self.use_dropout = use_dropout
+        self.compile_model = compile_model
 
         self.model = None
         self.loss_fn = nn.BCELoss()
         self.is_fitted = False
+
+    @property
+    def _unwrapped_model(self) -> MLP | None:
+        """Return the underlying MLP, unwrapping ``torch.compile`` if needed."""
+        if self.model is None:
+            return None
+        return getattr(self.model, "_orig_mod", self.model)
 
     def _init_model(self, input_dim: int) -> None:
         """Initialize the MLP model.
@@ -120,7 +134,7 @@ class ParametricUMAP:
             The input dimension of the data
 
         """
-        self.model = MLP(
+        model = MLP(
             input_dim=input_dim,
             hidden_dim=self.hidden_dim,
             output_dim=self.n_components,
@@ -128,6 +142,7 @@ class ParametricUMAP:
             use_batchnorm=self.use_batchnorm,
             use_dropout=self.use_dropout,
         ).to(self.device)
+        self.model = torch.compile(model) if self.compile_model else model
 
     @staticmethod
     def _precompute_edge_tensors(
@@ -297,8 +312,8 @@ class ParametricUMAP:
             raise RuntimeError("Model must be fitted before transform")
 
         X = np.asarray(X, dtype=np.float32)
-        if X.shape[1] != self.model.input_dim:
-            msg = f"X has {X.shape[1]} features, but model was fitted with {self.model.input_dim} features"
+        if X.shape[1] != self._unwrapped_model.input_dim:
+            msg = f"X has {X.shape[1]} features, but model was fitted with {self._unwrapped_model.input_dim} features"
             raise ValueError(msg)
 
         self.model.eval()
@@ -370,8 +385,8 @@ class ParametricUMAP:
             raise RuntimeError("Model must be fitted before saving")
 
         save_dict = {
-            "model_state_dict": self.model.state_dict(),
-            "input_dim": self.model.input_dim,
+            "model_state_dict": self._unwrapped_model.state_dict(),
+            "input_dim": self._unwrapped_model.input_dim,
             "n_components": self.n_components,
             "hidden_dim": self.hidden_dim,
             "n_layers": self.n_layers,

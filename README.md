@@ -111,6 +111,7 @@ embeddings = pumap.fit_transform(X, low_memory=True)
 - `batch_size`: Training batch size (default: 32)
 - `use_batchnorm`: Whether to use batch normalization in the embedding MLP (default: False)
 - `use_dropout`: Whether to use dropout in the embedding MLP (default: False)
+- `compile_model`: Apply `torch.compile` to the MLP for faster training on PyTorch 2.x (default: False). Adds a one-time compilation delay on the first forward pass
 
 ## Development
 
