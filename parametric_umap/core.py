@@ -282,6 +282,12 @@ class ParametricUMAP:
         if not self.is_fitted:
             raise RuntimeError("Model must be fitted before transform")
 
+        X = np.asarray(X, dtype=np.float32)
+        if X.shape[1] != self.model.input_dim:
+            raise ValueError(
+                f"X has {X.shape[1]} features, but model was fitted with {self.model.input_dim} features"
+            )
+
         self.model.eval()
         X = torch.tensor(X, dtype=torch.float32).to(self.device)
 
@@ -336,6 +342,7 @@ class ParametricUMAP:
 
         save_dict = {
             "model_state_dict": self.model.state_dict(),
+            "input_dim": self.model.input_dim,
             "n_components": self.n_components,
             "hidden_dim": self.hidden_dim,
             "n_layers": self.n_layers,
@@ -387,8 +394,9 @@ class ParametricUMAP:
             use_dropout=save_dict["use_dropout"],
         )
 
-        # Initialize model architecture
-        instance._init_model(input_dim=save_dict["model_state_dict"]["model.0.weight"].shape[1])
+        # Initialize model architecture (fall back to weight introspection for old checkpoints)
+        input_dim = save_dict.get("input_dim") or save_dict["model_state_dict"]["model.0.weight"].shape[1]
+        instance._init_model(input_dim=input_dim)
 
         # Load state dict
         instance.model.load_state_dict(save_dict["model_state_dict"])

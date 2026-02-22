@@ -50,6 +50,7 @@ class MLP(nn.Module):
         """Initialize the MLP with the given architecture configuration."""
         super().__init__()
 
+        self.input_dim = input_dim
         layers: list[nn.Module] = []
         in_dim = input_dim
 
