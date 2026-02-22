@@ -6,8 +6,8 @@ help:  ## Show this help message
 	@echo "Available commands:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-install:  ## Install all dependencies
-	uv sync --all-extras
+install:  ## Install all dependencies (CPU torch)
+	uv sync --extra dev --extra test --extra examples --extra cpu
 
 test:  ## Run tests
 	uv run pytest
