@@ -227,12 +227,12 @@ class ParametricUMAP:
                 src_embeddings = self.model(src_values)
                 dst_embeddings = self.model(dst_values)
 
-                # Compute distances
-                Z_distances = torch.norm(src_embeddings - dst_embeddings, dim=1)
+                # Compute distances (L^(2b) norm for embedding space, L2 for input space)
+                Z_distances = torch.norm(src_embeddings - dst_embeddings, dim=1, p=2 * self.b)
                 X_distances = torch.norm(src_values - dst_values, dim=1)
 
                 # Compute losses
-                qs = torch.pow(1 + self.a * torch.pow(Z_distances, 2 * self.b), -1)
+                qs = torch.pow(1 + self.a * Z_distances, -1)
                 qs = qs.clamp(1e-7, 1 - 1e-7)
                 umap_loss = self.loss_fn(qs, targets)
                 corr_loss = compute_correlation_loss(X_distances, Z_distances)
